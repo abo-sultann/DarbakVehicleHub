@@ -1,0 +1,13 @@
+<resources>
+    <color name="bg_deep">#050B14</color>
+    <color name="bg_panel">#D90A1626</color>
+    <color name="bg_panel_soft">#B80D1B2E</color>
+    <color name="blue_primary">#2F9BFF</color>
+    <color name="blue_glow">#5AB8FF</color>
+    <color name="blue_dim">#1E5F9B</color>
+    <color name="text_primary">#F4F8FF</color>
+    <color name="text_secondary">#A9BED6</color>
+    <color name="success">#59E391</color>
+    <color name="warning">#FFBF5A</color>
+    <color name="danger">#FF5D6C</color>
+</resources>
