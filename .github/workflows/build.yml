@@ -2,7 +2,7 @@ name: Build Darbak Vehicle Hub
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, darbak-system-v1 ]
   pull_request:
     branches: [ main ]
 
