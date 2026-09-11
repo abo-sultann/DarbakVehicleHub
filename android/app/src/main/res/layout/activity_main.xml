@@ -1,0 +1,262 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_root"
+    android:orientation="vertical"
+    android:paddingLeft="20dp"
+    android:paddingTop="14dp"
+    android:paddingRight="20dp"
+    android:paddingBottom="14dp"
+    android:layoutDirection="rtl">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="62dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center_vertical|right"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="دربك Vehicle Hub"
+                android:textColor="@color/text_primary"
+                android:textSize="25sp"
+                android:textStyle="bold" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="طريقك أسهل • بوابة بيانات السيارة"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/chipCan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:background="@drawable/bg_chip"
+            android:text="CAN  •  استماع آمن"
+            android:textColor="@color/success"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/chipTpms"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip"
+            android:text="TPMS  •  محاكاة"
+            android:textColor="@color/blue_glow"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.25"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:gravity="right|center_vertical"
+                android:text="ضغط وحرارة الإطارات"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:baselineAligned="false">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <LinearLayout
+                        android:id="@+id/cardFr"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:layout_margin="5dp"
+                        android:background="@drawable/bg_card"
+                        android:gravity="center"
+                        android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="أمامي يمين" android:textColor="@color/text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/frPsi" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="34.8" android:textColor="@color/text_primary" android:textSize="31sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/frMeta" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PSI   •   30°" android:textColor="@color/blue_glow" android:textSize="12sp" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:id="@+id/cardRr"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:layout_margin="5dp"
+                        android:background="@drawable/bg_card"
+                        android:gravity="center"
+                        android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="خلفي يمين" android:textColor="@color/text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/rrPsi" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="35.0" android:textColor="@color/text_primary" android:textSize="31sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/rrMeta" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PSI   •   30°" android:textColor="@color/blue_glow" android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="112dp"
+                    android:layout_height="match_parent"
+                    android:layout_margin="5dp"
+                    android:gravity="center"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="76dp"
+                        android:layout_height="164dp"
+                        android:background="@drawable/bg_card_active"
+                        android:gravity="center"
+                        android:text="FORTUNER\n2020"
+                        android:textAlignment="center"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                    <TextView
+                        android:id="@+id/tpmsSummary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="4 / 4 متصل"
+                        android:textColor="@color/success"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <LinearLayout
+                        android:id="@+id/cardFl"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:layout_margin="5dp"
+                        android:background="@drawable/bg_card_active"
+                        android:gravity="center"
+                        android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="أمامي يسار" android:textColor="@color/text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/flPsi" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="34.6" android:textColor="@color/text_primary" android:textSize="31sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/flMeta" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PSI   •   31°" android:textColor="@color/blue_glow" android:textSize="12sp" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:id="@+id/cardRl"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:layout_margin="5dp"
+                        android:background="@drawable/bg_card"
+                        android:gravity="center"
+                        android:orientation="vertical">
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="خلفي يسار" android:textColor="@color/text_secondary" android:textSize="12sp" />
+                        <TextView android:id="@+id/rlPsi" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="34.1" android:textColor="@color/text_primary" android:textSize="31sp" android:textStyle="bold" />
+                        <TextView android:id="@+id/rlMeta" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PSI   •   29°" android:textColor="@color/blue_glow" android:textSize="12sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="0.82"
+            android:layout_marginRight="14dp"
+            android:background="@drawable/bg_card"
+            android:orientation="vertical"
+            android:padding="12dp">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="36dp"
+                android:gravity="right|center_vertical"
+                android:text="بيانات السيارة"
+                android:textColor="@color/text_primary"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="horizontal" android:baselineAligned="false">
+                <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_margin="4dp" android:background="@drawable/bg_metric" android:gravity="center" android:orientation="vertical">
+                        <TextView android:text="السرعة" android:textColor="@color/text_secondary" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:id="@+id/speedValue" android:text="82" android:textColor="@color/text_primary" android:textSize="32sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:text="كم/س" android:textColor="@color/blue_glow" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_margin="4dp" android:background="@drawable/bg_metric" android:gravity="center" android:orientation="vertical">
+                        <TextView android:text="الفولت" android:textColor="@color/text_secondary" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:id="@+id/voltageValue" android:text="14.1" android:textColor="@color/text_primary" android:textSize="27sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:text="V" android:textColor="@color/blue_glow" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                    </LinearLayout>
+                </LinearLayout>
+                <LinearLayout android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:orientation="vertical">
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_margin="4dp" android:background="@drawable/bg_metric" android:gravity="center" android:orientation="vertical">
+                        <TextView android:text="RPM" android:textColor="@color/text_secondary" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:id="@+id/rpmValue" android:text="1850" android:textColor="@color/text_primary" android:textSize="27sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:text="د/د" android:textColor="@color/blue_glow" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                    </LinearLayout>
+                    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_margin="4dp" android:background="@drawable/bg_metric" android:gravity="center" android:orientation="vertical">
+                        <TextView android:text="حرارة المحرك" android:textColor="@color/text_secondary" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:id="@+id/coolantValue" android:text="88°" android:textColor="@color/text_primary" android:textSize="27sp" android:textStyle="bold" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                        <TextView android:text="C" android:textColor="@color/blue_glow" android:textSize="11sp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="62dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_metric"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp">
+                <TextView
+                    android:id="@+id/healthTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="right"
+                    android:text="الحالة طبيعية"
+                    android:textColor="@color/success"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/healthDetail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="right"
+                    android:text="لا توجد تنبيهات • المحاكاة تعمل"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="11sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:gravity="center_vertical|right"
+        android:text="تصميم وتطوير • أبوسلطان    |    Darbak Core • v0.1.0"
+        android:textColor="#7189A3"
+        android:textSize="10sp" />
+</LinearLayout>
