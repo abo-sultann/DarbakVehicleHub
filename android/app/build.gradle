@@ -1,0 +1,14 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.abosultan.darbakvehiclehub'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.abosultan.darbakvehiclehub'
+        minSdk 25
+        targetSdk 28
+        versionCode 1
+        versionName '0.1.0'
+    }
+}
