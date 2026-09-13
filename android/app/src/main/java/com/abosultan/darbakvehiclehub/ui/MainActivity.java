@@ -34,13 +34,9 @@ public final class MainActivity extends Activity {
     private TextView rlMetaView;
     private TextView rrMetaView;
     private TextView speedView;
-    private TextView speedSourceView;
     private TextView rpmView;
-    private TextView rpmSourceView;
     private TextView coolantView;
-    private TextView coolantSourceView;
     private TextView voltageView;
-    private TextView voltageSourceView;
     private TextView healthTitle;
     private TextView healthDetail;
     private TextView chipCan;
@@ -90,7 +86,7 @@ public final class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         bindViews();
-        findViewById(R.id.headerTitle).setOnLongClickListener(new View.OnLongClickListener() {
+        chipCan.setOnLongClickListener(new View.OnLongClickListener() {
             @Override public boolean onLongClick(View v) {
                 showDiagnostics();
                 return true;
@@ -121,13 +117,9 @@ public final class MainActivity extends Activity {
         rlMetaView = findViewById(R.id.rlMeta);
         rrMetaView = findViewById(R.id.rrMeta);
         speedView = findViewById(R.id.speedValue);
-        speedSourceView = findViewById(R.id.speedSource);
         rpmView = findViewById(R.id.rpmValue);
-        rpmSourceView = findViewById(R.id.rpmSource);
         coolantView = findViewById(R.id.coolantValue);
-        coolantSourceView = findViewById(R.id.coolantSource);
         voltageView = findViewById(R.id.voltageValue);
-        voltageSourceView = findViewById(R.id.voltageSource);
         healthTitle = findViewById(R.id.healthTitle);
         healthDetail = findViewById(R.id.healthDetail);
         chipCan = findViewById(R.id.chipCan);
@@ -141,10 +133,10 @@ public final class MainActivity extends Activity {
         bindFloat(rlPsiView, rlMetaView, telemetry.rlPsi, "PSI", now);
         bindFloat(rrPsiView, rrMetaView, telemetry.rrPsi, "PSI", now);
 
-        bindInt(speedView, speedSourceView, telemetry.vehicleSpeedKph, "كم/س", now);
-        bindInt(rpmView, rpmSourceView, telemetry.rpm, "د/د", now);
-        bindInt(coolantView, coolantSourceView, telemetry.coolantC, "°C", now);
-        bindFloat(voltageView, voltageSourceView, telemetry.voltage, "V", now);
+        bindIntInValue(speedView, telemetry.vehicleSpeedKph, now);
+        bindIntInValue(rpmView, telemetry.rpm, now);
+        bindIntInValue(coolantView, telemetry.coolantC, now);
+        bindFloatInValue(voltageView, telemetry.voltage, now);
 
         int tpmsCount = availableTpmsCount(now);
         tpmsSummary.setText(tpmsCount + " / 4 متصل");
@@ -168,29 +160,34 @@ public final class MainActivity extends Activity {
         } else {
             healthTitle.setText("الحالة طبيعية");
             healthTitle.setTextColor(getResources().getColor(R.color.success));
-            healthDetail.setText("لا توجد تنبيهات • مصدر القراءات ظاهر لكل قيمة");
+            healthDetail.setText("لا توجد تنبيهات • المصدر ظاهر مع كل قراءة");
         }
     }
 
-    private void bindFloat(TextView valueView, TextView sourceView,
+    private void bindFloat(TextView valueView, TextView metaView,
                            TelemetryState.FloatReading reading, String unit, long now) {
         if (reading.isAvailable(now)) {
             valueView.setText(oneDecimal(reading.value));
-            sourceView.setText(unit + " • " + reading.source.label());
+            metaView.setText(unit + " • " + reading.source.label());
         } else {
             valueView.setText("—");
-            sourceView.setText(unit + " • غير متاح");
+            metaView.setText(unit + " • غير متاح");
         }
     }
 
-    private void bindInt(TextView valueView, TextView sourceView,
-                         TelemetryState.IntReading reading, String unit, long now) {
+    private void bindIntInValue(TextView valueView, TelemetryState.IntReading reading, long now) {
         if (reading.isAvailable(now)) {
-            valueView.setText(String.valueOf(reading.value));
-            sourceView.setText(unit + " • " + reading.source.label());
+            valueView.setText(reading.value + "\n" + reading.source.label());
         } else {
-            valueView.setText("—");
-            sourceView.setText(unit + " • غير متاح");
+            valueView.setText("—\nغير متاح");
+        }
+    }
+
+    private void bindFloatInValue(TextView valueView, TelemetryState.FloatReading reading, long now) {
+        if (reading.isAvailable(now)) {
+            valueView.setText(oneDecimal(reading.value) + "\n" + reading.source.label());
+        } else {
+            valueView.setText("—\nغير متاح");
         }
     }
 
