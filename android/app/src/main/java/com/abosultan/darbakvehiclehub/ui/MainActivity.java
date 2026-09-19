@@ -3,6 +3,9 @@ package com.abosultan.darbakvehiclehub.ui;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.os.Bundle;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import com.abosultan.darbakvehiclehub.fridge.FridgeBleManager;
 import android.os.Handler;
 import android.view.View;
 import android.view.Window;
@@ -43,6 +46,11 @@ public final class MainActivity extends Activity {
     private TextView chipTpms;
     private TextView chipFridge;
     private TextView tpmsSummary;
+    private FridgeBleManager fridgeBle;
+    private String fridgeStatus = "غير متصلة";
+    private String fridgeDevice = "—";
+    private String fridgeGatt = "—";
+    private String fridgeProtocol = "—";
 
     private final Runnable simulator = new Runnable() {
         @Override public void run() {
@@ -98,6 +106,12 @@ public final class MainActivity extends Activity {
             @Override public void onClick(View v) { showFridgeStatus(); }
         });
 
+        fridgeBle = new FridgeBleManager(this, new FridgeBleManager.Listener() {
+            @Override public void onStatus(final String s) { runOnUiThread(new Runnable(){ @Override public void run(){ fridgeStatus=s; chipFridge.setText("❄ الثلاجة • "+s); }}); }
+            @Override public void onDevice(final String n) { fridgeDevice=n; }
+            @Override public void onGattProfile(final String p) { fridgeGatt=p; }
+            @Override public void onProtocol(final String p) { fridgeProtocol=p; }
+        });
         render(System.currentTimeMillis());
     }
 
@@ -105,6 +119,13 @@ public final class MainActivity extends Activity {
         super.onResume();
         handler.removeCallbacks(simulator);
         handler.post(simulator);
+    }
+
+    @Override protected void onDestroy() { if (fridgeBle != null) fridgeBle.close(); super.onDestroy(); }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode == 701 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED && fridgeBle != null) fridgeBle.startScan();
     }
 
     @Override protected void onPause() {
@@ -219,11 +240,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showFridgeStatus() {
-        new AlertDialog.Builder(this)
-                .setTitle("الثلاجة • Fridge Engine")
-                .setMessage("الحالة: غير متصلة\nالاكتشاف: BLE تلقائي\nالبروتوكولات: Alpicool/OEM + Drivers قابلة للإضافة\n\nلن تُعرض أو تُرسل أي قيمة غير مؤكدة. عند توصيل الثلاجة سنحدد GATT الفعلي ثم نفعّل Driver المناسب.")
-                .setPositiveButton("إغلاق", null)
-                .show();
+        if (fridgeBle != null && !fridgeBle.hasLocationPermission()) requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 701);\n        else if (fridgeBle != null) fridgeBle.startScan();\n        new AlertDialog.Builder(this)\n                .setTitle("الثلاجة • Fridge Engine")\n                .setMessage("الحالة: "+fridgeStatus+"\\nالجهاز: "+fridgeDevice+"\\nالبروتوكول: "+fridgeProtocol+"\\n\\nGATT المكتشف:\\n"+fridgeGatt+"\\n\\nالاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.")\n                .setPositiveButton("إغلاق", null)\n                .show();
     }
 
     private void showDiagnostics() {
