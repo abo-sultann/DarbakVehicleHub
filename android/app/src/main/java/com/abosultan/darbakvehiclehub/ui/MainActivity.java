@@ -41,6 +41,7 @@ public final class MainActivity extends Activity {
     private TextView healthDetail;
     private TextView chipCan;
     private TextView chipTpms;
+    private TextView chipFridge;
     private TextView tpmsSummary;
 
     private final Runnable simulator = new Runnable() {
@@ -93,6 +94,10 @@ public final class MainActivity extends Activity {
             }
         });
 
+        chipFridge.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { showFridgeStatus(); }
+        });
+
         render(System.currentTimeMillis());
     }
 
@@ -124,6 +129,7 @@ public final class MainActivity extends Activity {
         healthDetail = findViewById(R.id.healthDetail);
         chipCan = findViewById(R.id.chipCan);
         chipTpms = findViewById(R.id.chipTpms);
+        chipFridge = findViewById(R.id.chipFridge);
         tpmsSummary = findViewById(R.id.tpmsSummary);
     }
 
@@ -210,6 +216,14 @@ public final class MainActivity extends Activity {
             if (Float.isNaN(lowest) || reading.value < lowest) lowest = reading.value;
         }
         return lowest;
+    }
+
+    private void showFridgeStatus() {
+        new AlertDialog.Builder(this)
+                .setTitle("الثلاجة • Fridge Engine")
+                .setMessage("الحالة: غير متصلة\nالاكتشاف: BLE تلقائي\nالبروتوكولات: Alpicool/OEM + Drivers قابلة للإضافة\n\nلن تُعرض أو تُرسل أي قيمة غير مؤكدة. عند توصيل الثلاجة سنحدد GATT الفعلي ثم نفعّل Driver المناسب.")
+                .setPositiveButton("إغلاق", null)
+                .show();
     }
 
     private void showDiagnostics() {
