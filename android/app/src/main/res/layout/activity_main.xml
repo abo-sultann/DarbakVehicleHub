@@ -47,6 +47,16 @@
             android:textSize="12sp" />
 
         <TextView
+            android:id="@+id/chipFridge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:background="@drawable/bg_chip"
+            android:text="❄ الثلاجة • غير متصلة"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
+        <TextView
             android:id="@+id/chipTpms"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -256,7 +266,7 @@
         android:layout_width="match_parent"
         android:layout_height="28dp"
         android:gravity="center_vertical|right"
-        android:text="تصميم وتطوير • أبوسلطان    |    Darbak Core • v0.1.0"
+        android:text="تصميم وتطوير • أبوسلطان    |    Darbak Core • v0.2.0 • Fridge Engine"
         android:textColor="#7189A3"
         android:textSize="10sp" />
 </LinearLayout>
