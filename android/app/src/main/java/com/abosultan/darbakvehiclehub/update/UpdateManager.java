@@ -22,11 +22,11 @@ public final class UpdateManager {
                 .setTitle("تحديث دربك")
                 .setMessage("جاري التحقق من آخر نسخة…")
                 .setCancelable(true).show();
-        new Thread(new Runnable(){ @Override public void run(){
+        final Handler timeoutHandler=new Handler();\n        final Runnable timeout=new Runnable(){@Override public void run(){if(wait.isShowing()){wait.dismiss();new AlertDialog.Builder(activity).setTitle("التحديث").setMessage("تعذر الاتصال بخادم التحديث • حاول مرة أخرى").setPositiveButton("إغلاق",null).show();}}};\n        timeoutHandler.postDelayed(timeout,6500);\n        new Thread(new Runnable(){ @Override public void run(){
             String error=null, version=null, url=null, notes=null; int code=0;
             try{
                 HttpURLConnection c=(HttpURLConnection)new URL(MANIFEST_URL).openConnection();
-                c.setConnectTimeout(7000); c.setReadTimeout(7000); c.setUseCaches(false);
+                c.setConnectTimeout(5000); c.setReadTimeout(5000); c.setUseCaches(false); c.setRequestProperty("Cache-Control","no-cache");\n                int http=c.getResponseCode(); if(http<200||http>=300) throw new java.io.IOException("HTTP "+http);
                 BufferedReader r=new BufferedReader(new InputStreamReader(c.getInputStream(),"UTF-8"));
                 StringBuilder b=new StringBuilder(); String line; while((line=r.readLine())!=null)b.append(line); r.close();
                 JSONObject j=new JSONObject(b.toString());
@@ -34,7 +34,7 @@ public final class UpdateManager {
             }catch(Exception e){error=e.getClass().getSimpleName();}
             final String fe=error,fv=version,fu=url,fn=notes; final int fc=code;
             activity.runOnUiThread(new Runnable(){@Override public void run(){
-                if(wait.isShowing())wait.dismiss();
+                timeoutHandler.removeCallbacks(timeout);\n                if(wait.isShowing())wait.dismiss();
                 if(fe!=null){new AlertDialog.Builder(activity).setTitle("التحديث").setMessage("تعذر التحقق الآن • "+fe).setPositiveButton("إغلاق",null).show();return;}
                 if(fc<=BuildConfig.VERSION_CODE){new AlertDialog.Builder(activity).setTitle("التحديث").setMessage("أنت على أحدث نسخة • v"+BuildConfig.VERSION_NAME).setPositiveButton("حسنًا",null).show();return;}
                 new AlertDialog.Builder(activity).setTitle("تحديث متاح • v"+fv)
