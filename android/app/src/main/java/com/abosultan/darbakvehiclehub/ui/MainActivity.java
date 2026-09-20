@@ -226,23 +226,13 @@ public final class MainActivity extends Activity {
     }
 
     private void bindIntInValue(TextView valueView, TelemetryState.IntReading reading, long now) {
-        if (reading.isAvailable(now)) {
-            valueView.setText(reading.value + "
-" + reading.source.label());
-        } else {
-            valueView.setText("—
-غير متاح");
-        }
+        if (reading.isAvailable(now)) valueView.setText(reading.value + " • " + reading.source.label());
+        else valueView.setText("— • غير متاح");
     }
 
     private void bindFloatInValue(TextView valueView, TelemetryState.FloatReading reading, long now) {
-        if (reading.isAvailable(now)) {
-            valueView.setText(oneDecimal(reading.value) + "
-" + reading.source.label());
-        } else {
-            valueView.setText("—
-غير متاح");
-        }
+        if (reading.isAvailable(now)) valueView.setText(oneDecimal(reading.value) + " • " + reading.source.label());
+        else valueView.setText("— • غير متاح");
     }
 
     private int availableTpmsCount(long now) {
@@ -300,18 +290,12 @@ public final class MainActivity extends Activity {
     }
 
     private String fridgeMessage() {
+        String nl = System.getProperty("line.separator");
         return "الحالة: " + fridgeStatus
-                + "\
-الجهاز: " + fridgeDevice
-                + "\
-البروتوكول: " + fridgeProtocol
-                + "\
-\
-GATT المكتشف:\
-" + fridgeGatt
-                + "\
-\
-الاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.";
+                + nl + "الجهاز: " + fridgeDevice
+                + nl + "البروتوكول: " + fridgeProtocol
+                + nl + nl + "GATT المكتشف:" + nl + fridgeGatt
+                + nl + nl + "الاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.";
     }
 
     private void refreshFridgeDialog() {
