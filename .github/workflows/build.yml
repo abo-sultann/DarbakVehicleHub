@@ -3,8 +3,16 @@ name: Build Darbak Vehicle Hub
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'android/**'
+      - 'firmware/**'
+      - '.github/workflows/build.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - 'android/**'
+      - 'firmware/**'
+      - '.github/workflows/build.yml'
 
 jobs:
   changes:
@@ -17,6 +25,8 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          base: ${{ github.event.before }}
+          ref: ${{ github.sha }}
           filters: |
             android:
               - 'android/**'
