@@ -44,7 +44,10 @@ public final class FridgeBleManager {
 
  public void startScan(){
   if(!hasLocationPermission()){listener.onStatus("يحتاج إذن الموقع لمسح BLE على Android 7.1");return;}
-  BluetoothManager bm=(BluetoothManager)activity.getSystemService(Context.BLUETOOTH_SERVICE); BluetoothAdapter a=bm==null?null:bm.getAdapter(); adapter=a;
+  BluetoothManager bm=(BluetoothManager)activity.getSystemService(Context.BLUETOOTH_SERVICE);
+  BluetoothAdapter a=bm==null?null:bm.getAdapter();
+  if(a==null)try{a=BluetoothAdapter.getDefaultAdapter();}catch(Exception ignored){}
+  adapter=a;
   if(a==null){listener.onStatus("Bluetooth غير مدعوم من النظام");return;}
   if(!a.isEnabled()){listener.onStatus("Bluetooth متوقف • اضغط لتشغيله");return;}
   scanner=a.getBluetoothLeScanner(); if(scanner==null){listener.onStatus("BLE Scanner غير متاح");return;}
@@ -97,11 +100,14 @@ public final class FridgeBleManager {
  };
 
  private void startLegacyScan(){
-  if(adapter==null||!adapter.isEnabled()){listener.onStatus("Bluetooth غير جاهز للمسح البديل");return;}
+  if(adapter==null)try{adapter=BluetoothAdapter.getDefaultAdapter();}catch(Exception ignored){}
+  boolean featureLe=activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE);
+  if(adapter==null){listener.onStatus("T3 BLE • Adapter=null • FEATURE_LE="+featureLe);return;}
+  if(!adapter.isEnabled()){listener.onStatus("T3 BLE • Adapter موجود لكن Bluetooth متوقف");return;}
   stopScanOnly(); legacyScanning=true; scanning=true;
   listener.onStatus("1/4 • مسح BLE متوافق مع T3…");
   boolean ok=false;try{ok=adapter.startLeScan(legacyCallback);}catch(Exception ignored){}
-  if(!ok){legacyScanning=false;scanning=false;listener.onStatus("تعذر بدء BLE على هذه الشاشة • أعد تشغيل Bluetooth");return;}
+  if(!ok){legacyScanning=false;scanning=false;listener.onStatus("T3 BLE • startLeScan=false • FEATURE_LE="+featureLe+" • Adapter=ON");return;}
   handler.postDelayed(new Runnable(){@Override public void run(){if(legacyScanning){stopScanOnly();listener.onStatus("انتهى بحث T3 • لم تظهر الثلاجة");}}},SCAN_MS);
  }
 
