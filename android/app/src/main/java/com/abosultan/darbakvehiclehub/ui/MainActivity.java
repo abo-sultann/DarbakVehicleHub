@@ -53,7 +53,8 @@ public final class MainActivity extends Activity {
     private String fridgeStatus = "غير متصلة";
     private String fridgeDevice = "—";
     private String fridgeGatt = "—";
-    private String fridgeProtocol = "—";\n    private AlertDialog fridgeDialog;
+    private String fridgeProtocol = "—";
+    private AlertDialog fridgeDialog;
 
     private final Runnable simulator = new Runnable() {
         @Override public void run() {
@@ -226,17 +227,21 @@ public final class MainActivity extends Activity {
 
     private void bindIntInValue(TextView valueView, TelemetryState.IntReading reading, long now) {
         if (reading.isAvailable(now)) {
-            valueView.setText(reading.value + "\n" + reading.source.label());
+            valueView.setText(reading.value + "
+" + reading.source.label());
         } else {
-            valueView.setText("—\nغير متاح");
+            valueView.setText("—
+غير متاح");
         }
     }
 
     private void bindFloatInValue(TextView valueView, TelemetryState.FloatReading reading, long now) {
         if (reading.isAvailable(now)) {
-            valueView.setText(oneDecimal(reading.value) + "\n" + reading.source.label());
+            valueView.setText(oneDecimal(reading.value) + "
+" + reading.source.label());
         } else {
-            valueView.setText("—\nغير متاح");
+            valueView.setText("—
+غير متاح");
         }
     }
 
@@ -296,10 +301,17 @@ public final class MainActivity extends Activity {
 
     private String fridgeMessage() {
         return "الحالة: " + fridgeStatus
-                + "\\nالجهاز: " + fridgeDevice
-                + "\\nالبروتوكول: " + fridgeProtocol
-                + "\\n\\nGATT المكتشف:\\n" + fridgeGatt
-                + "\\n\\nالاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.";
+                + "\
+الجهاز: " + fridgeDevice
+                + "\
+البروتوكول: " + fridgeProtocol
+                + "\
+\
+GATT المكتشف:\
+" + fridgeGatt
+                + "\
+\
+الاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.";
     }
 
     private void refreshFridgeDialog() {
@@ -311,16 +323,28 @@ public final class MainActivity extends Activity {
         StringBuilder text = new StringBuilder();
         text.append("حالة CAN: ")
                 .append(lastFrameAtMs > 0L && now - lastFrameAtMs <= TelemetryState.DEFAULT_STALE_AFTER_MS ? "متصل/محاكاة" : "غير متصل")
-                .append('\n');
-        text.append("آخر إطار: ").append(formatTime(lastFrameAtMs)).append('\n');
-        text.append("حساسات TPMS المكتشفة: ").append(availableTpmsCount(now)).append(" / 4\n\n");
-        text.append("سرعة السيارة: ").append(readingDiagnostic(telemetry.vehicleSpeedKph, now)).append('\n');
-        text.append("CAN الخام: ").append(readingDiagnostic(telemetry.rawCanSpeedKph, now)).append('\n');
-        text.append("GPS: ").append(readingDiagnostic(telemetry.gpsSpeedKph, now)).append('\n');
-        text.append("السرعة المصححة: ").append(readingDiagnostic(telemetry.correctedSpeedKph, now)).append('\n');
-        text.append("RPM: ").append(readingDiagnostic(telemetry.rpm, now)).append('\n');
-        text.append("حرارة المحرك: ").append(readingDiagnostic(telemetry.coolantC, now)).append('\n');
-        text.append("الفولت: ").append(readingDiagnostic(telemetry.voltage, now)).append("\n\n");
+                .append('
+');
+        text.append("آخر إطار: ").append(formatTime(lastFrameAtMs)).append('
+');
+        text.append("حساسات TPMS المكتشفة: ").append(availableTpmsCount(now)).append(" / 4
+
+");
+        text.append("سرعة السيارة: ").append(readingDiagnostic(telemetry.vehicleSpeedKph, now)).append('
+');
+        text.append("CAN الخام: ").append(readingDiagnostic(telemetry.rawCanSpeedKph, now)).append('
+');
+        text.append("GPS: ").append(readingDiagnostic(telemetry.gpsSpeedKph, now)).append('
+');
+        text.append("السرعة المصححة: ").append(readingDiagnostic(telemetry.correctedSpeedKph, now)).append('
+');
+        text.append("RPM: ").append(readingDiagnostic(telemetry.rpm, now)).append('
+');
+        text.append("حرارة المحرك: ").append(readingDiagnostic(telemetry.coolantC, now)).append('
+');
+        text.append("الفولت: ").append(readingDiagnostic(telemetry.voltage, now)).append("
+
+");
         text.append("آخر خطأ: ").append(lastError);
 
         new AlertDialog.Builder(this)
