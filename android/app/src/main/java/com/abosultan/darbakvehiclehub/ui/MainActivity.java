@@ -271,7 +271,9 @@ public final class MainActivity extends Activity {
                     });
                 }
             });
-            fridgeDialog.show();\n            TextView messageView = fridgeDialog.findViewById(android.R.id.message);\n            if (messageView != null) { messageView.setTextSize(16f); messageView.setTextIsSelectable(true); messageView.setLineSpacing(2f, 1.05f); }
+            fridgeDialog.show();
+            TextView messageView = fridgeDialog.findViewById(android.R.id.message);
+            if (messageView != null) { messageView.setTextSize(16f); messageView.setTextIsSelectable(true); messageView.setLineSpacing(2f, 1.05f); }
         }
         startFridgeDiscovery();
     }
