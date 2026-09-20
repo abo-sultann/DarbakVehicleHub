@@ -19,7 +19,7 @@ public final class FridgeBleManager {
  private static final String ICECO_PREFIX="24:35:CC";
  private final Activity activity; private final Listener listener; private final Handler handler=new Handler(); private final FridgeEngine engine=new FridgeEngine();
  private BluetoothLeScanner scanner; private BluetoothGatt gatt; private boolean scanning; private ScanResult bestCandidate;
- private BluetoothAdapter adapter; private boolean legacyScanning=false;
+ private BluetoothAdapter adapter; private boolean legacyScanning=false; private boolean compatibilityScan=false;
  private final Runnable scanTimeout=new Runnable(){@Override public void run(){if(!scanning)return;ScanResult c=bestCandidate;stopScanOnly();if(c!=null&&isStrongMatch(c.getDevice().getName(),c.getDevice().getAddress(),c.getScanRecord()))connect(c,"تطابق ثلاجة");else listener.onStatus("انتهى البحث • لم تظهر ثلاجة معروفة");}};
  private final Runnable connectTimeout=new Runnable(){@Override public void run(){listener.onStatus("انتهت مهلة اتصال BLE • أعد البحث");closeGatt();}};
  private final Runnable discoverTimeout=new Runnable(){@Override public void run(){listener.onStatus("تعذر اكتشاف خدمات GATT • أعد البحث");listener.onGattProfile("لم تصل خدمات GATT خلال المهلة");closeGatt();}};
@@ -51,9 +51,9 @@ public final class FridgeBleManager {
   if(a==null){listener.onStatus("Bluetooth غير مدعوم من النظام");return;}
   if(!a.isEnabled()){listener.onStatus("Bluetooth متوقف • اضغط لتشغيله");return;}
   scanner=a.getBluetoothLeScanner(); if(scanner==null){listener.onStatus("BLE Scanner غير متاح");return;}
-  stopScanOnly(); closeGatt(); bestCandidate=null; scanning=true; listener.onStatus("1/4 • جاري البحث عن الثلاجة…");
+  stopScanOnly(); closeGatt(); bestCandidate=null; compatibilityScan=false; scanning=true; listener.onStatus("1/4 • جاري البحث عن الثلاجة…");
   try{
-   scanner.startScan(Collections.<ScanFilter>emptyList(),new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),scanCallback);
+   scanner.startScan(Collections.<ScanFilter>emptyList(),new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_BALANCED).build(),scanCallback);
    handler.postDelayed(scanTimeout,SCAN_MS);
   }catch(Exception e){scanning=false;listener.onStatus("تعذر بدء مسح BLE");}
  }
@@ -78,11 +78,36 @@ public final class FridgeBleManager {
   @Override public void onScanFailed(int code){
    stopScanOnly();
    if(code==ScanCallback.SCAN_FAILED_INTERNAL_ERROR){
-    listener.onStatus("BLE scanCode=3 • تحويل للمسح المتوافق مع T3…");
-    handler.postDelayed(new Runnable(){@Override public void run(){startLegacyScan();}},700L);
+    if(!compatibilityScan){
+     compatibilityScan=true;
+     listener.onStatus("BLE scanCode=3 • تجربة Scanner الافتراضي لـ T3…");
+     handler.postDelayed(new Runnable(){@Override public void run(){startCompatibilityScan();}},900L);
+    }else{
+     listener.onStatus("Scanner الافتراضي فشل • تجربة Legacy BLE…");
+     handler.postDelayed(new Runnable(){@Override public void run(){startLegacyScan();}},900L);
+    }
    }else listener.onStatus("فشل مسح BLE • scanCode="+code);
   }
  };
+
+ private void startCompatibilityScan(){
+  BluetoothManager bm=(BluetoothManager)activity.getSystemService(Context.BLUETOOTH_SERVICE);
+  BluetoothAdapter a=bm==null?null:bm.getAdapter();
+  if(a==null)try{a=BluetoothAdapter.getDefaultAdapter();}catch(Exception ignored){}
+  adapter=a;
+  if(a==null||!a.isEnabled()){listener.onStatus("T3 BLE • Adapter غير جاهز");return;}
+  scanner=a.getBluetoothLeScanner();
+  if(scanner==null){listener.onStatus("T3 BLE • Scanner=null • تجربة Legacy");startLegacyScan();return;}
+  stopScanOnly(); scanning=true;
+  listener.onStatus("1/4 • Scanner افتراضي متوافق مع T3…");
+  try{
+   scanner.startScan(scanCallback);
+   handler.postDelayed(scanTimeout,SCAN_MS);
+  }catch(Exception e){
+   stopScanOnly(); listener.onStatus("Scanner الافتراضي تعذر • تجربة Legacy");
+   handler.postDelayed(new Runnable(){@Override public void run(){startLegacyScan();}},700L);
+  }
+ }
 
  private final BluetoothAdapter.LeScanCallback legacyCallback=new BluetoothAdapter.LeScanCallback(){
   @Override public void onLeScan(BluetoothDevice d,int rssi,byte[] scanRecord){
