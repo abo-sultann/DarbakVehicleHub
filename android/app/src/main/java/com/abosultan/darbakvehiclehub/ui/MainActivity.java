@@ -146,7 +146,7 @@ public final class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == 702 && fridgeBle != null) {
             if (fridgeBle.bluetoothState() == 2) { fridgeBle.startScan(); refreshFridgeDialog(); }
-            else fridgeStatus = "Bluetooth ما زال متوقفًا";
+            else { fridgeStatus = "Bluetooth ما زال متوقفًا"; refreshFridgeDialog(); }
         }
     }
 
@@ -259,7 +259,7 @@ public final class MainActivity extends Activity {
     private void showFridgeStatus() {
         if (fridgeDialog == null || !fridgeDialog.isShowing()) {
             fridgeDialog = new AlertDialog.Builder(this)
-                    .setTitle("الثلاجة • Fridge Engine")
+                    .setTitle("❄ الثلاجة • تشخيص الاتصال")
                     .setMessage(fridgeMessage())
                     .setNegativeButton("إغلاق", null)
                     .setPositiveButton("إعادة البحث", null)
@@ -271,7 +271,7 @@ public final class MainActivity extends Activity {
                     });
                 }
             });
-            fridgeDialog.show();
+            fridgeDialog.show();\n            TextView messageView = fridgeDialog.findViewById(android.R.id.message);\n            if (messageView != null) { messageView.setTextSize(16f); messageView.setTextIsSelectable(true); messageView.setLineSpacing(2f, 1.05f); }
         }
         startFridgeDiscovery();
     }
