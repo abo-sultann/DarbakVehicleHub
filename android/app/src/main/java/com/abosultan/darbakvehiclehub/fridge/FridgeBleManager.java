@@ -86,12 +86,11 @@ public final class FridgeBleManager {
  private static String describe(BluetoothGatt g){
   StringBuilder b=new StringBuilder();
   for(BluetoothGattService s:g.getServices()){
-   if(b.length()>0)b.append("
-");
+   if(b.length()>0)b.append('\\n');
    b.append("S ").append(s.getUuid());
-   for(BluetoothGattCharacteristic c:s.getCharacteristics()){
-    b.append("
-  C ").append(c.getUuid()).append(" [").append(properties(c.getProperties())).append("]");
+   for(BluetoothGattCharacteristic ch:s.getCharacteristics()){
+    b.append('\\n').append("  C ").append(ch.getUuid())
+     .append(" [").append(properties(ch.getProperties())).append("]");
    }
   }
   return b.length()==0?"لا توجد خدمات":b.toString();
