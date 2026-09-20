@@ -19,6 +19,7 @@ public final class FridgeBleManager {
  private static final String ICECO_PREFIX="24:35:CC";
  private final Activity activity; private final Listener listener; private final Handler handler=new Handler(); private final FridgeEngine engine=new FridgeEngine();
  private BluetoothLeScanner scanner; private BluetoothGatt gatt; private boolean scanning; private ScanResult bestCandidate;
+ private BluetoothAdapter adapter; private boolean legacyScanning=false;
  private final Runnable scanTimeout=new Runnable(){@Override public void run(){if(!scanning)return;ScanResult c=bestCandidate;stopScanOnly();if(c!=null&&isStrongMatch(c.getDevice().getName(),c.getDevice().getAddress(),c.getScanRecord()))connect(c,"تطابق ثلاجة");else listener.onStatus("انتهى البحث • لم تظهر ثلاجة معروفة");}};
  private final Runnable connectTimeout=new Runnable(){@Override public void run(){listener.onStatus("انتهت مهلة اتصال BLE • أعد البحث");closeGatt();}};
  private final Runnable discoverTimeout=new Runnable(){@Override public void run(){listener.onStatus("تعذر اكتشاف خدمات GATT • أعد البحث");listener.onGattProfile("لم تصل خدمات GATT خلال المهلة");closeGatt();}};
@@ -43,7 +44,7 @@ public final class FridgeBleManager {
 
  public void startScan(){
   if(!hasLocationPermission()){listener.onStatus("يحتاج إذن الموقع لمسح BLE على Android 7.1");return;}
-  BluetoothManager bm=(BluetoothManager)activity.getSystemService(Context.BLUETOOTH_SERVICE); BluetoothAdapter a=bm==null?null:bm.getAdapter();
+  BluetoothManager bm=(BluetoothManager)activity.getSystemService(Context.BLUETOOTH_SERVICE); BluetoothAdapter a=bm==null?null:bm.getAdapter(); adapter=a;
   if(a==null){listener.onStatus("Bluetooth غير مدعوم من النظام");return;}
   if(!a.isEnabled()){listener.onStatus("Bluetooth متوقف • اضغط لتشغيله");return;}
   scanner=a.getBluetoothLeScanner(); if(scanner==null){listener.onStatus("BLE Scanner غير متاح");return;}
@@ -57,6 +58,8 @@ public final class FridgeBleManager {
  private void stopScanOnly(){
   scanning=false;handler.removeCallbacks(scanTimeout);
   if(scanner!=null)try{scanner.stopScan(scanCallback);}catch(Exception ignored){}
+  if(legacyScanning&&adapter!=null)try{adapter.stopLeScan(legacyCallback);}catch(Exception ignored){}
+  legacyScanning=false;
  }
  public void stopScan(){stopScanOnly();}
  public void close(){handler.removeCallbacksAndMessages(null);stopScanOnly();closeGatt();}
@@ -69,8 +72,44 @@ public final class FridgeBleManager {
    if(isStrongMatch(n,addr,rec)){stopScanOnly();connect(r,"2/4 • تم العثور على الثلاجة");return;}
    if(bestCandidate==null||r.getRssi()>bestCandidate.getRssi())bestCandidate=r;
   }
-  @Override public void onScanFailed(int code){stopScanOnly();listener.onStatus("فشل مسح BLE • scanCode="+code);}
+  @Override public void onScanFailed(int code){
+   stopScanOnly();
+   if(code==ScanCallback.SCAN_FAILED_INTERNAL_ERROR){
+    listener.onStatus("BLE scanCode=3 • تحويل للمسح المتوافق مع T3…");
+    handler.postDelayed(new Runnable(){@Override public void run(){startLegacyScan();}},700L);
+   }else listener.onStatus("فشل مسح BLE • scanCode="+code);
+  }
  };
+
+ private final BluetoothAdapter.LeScanCallback legacyCallback=new BluetoothAdapter.LeScanCallback(){
+  @Override public void onLeScan(BluetoothDevice d,int rssi,byte[] scanRecord){
+   if(d==null)return;
+   String n=d.getName(); String addr=d.getAddress();
+   if(isStrongLegacyMatch(n,addr)){
+    stopScanOnly();
+    listener.onDevice(((n==null||n.trim().isEmpty())?"BLE device":n)+" • "+addr+" • RSSI "+rssi);
+    listener.onStatus("2/4 • تم العثور على الثلاجة • Legacy BLE");
+    closeGatt();
+    try{gatt=d.connectGatt(activity,false,gattCallback);handler.postDelayed(connectTimeout,CONNECT_TIMEOUT_MS);}
+    catch(Exception e){listener.onStatus("تعذر بدء اتصال GATT");}
+   }
+  }
+ };
+
+ private void startLegacyScan(){
+  if(adapter==null||!adapter.isEnabled()){listener.onStatus("Bluetooth غير جاهز للمسح البديل");return;}
+  stopScanOnly(); legacyScanning=true; scanning=true;
+  listener.onStatus("1/4 • مسح BLE متوافق مع T3…");
+  boolean ok=false;try{ok=adapter.startLeScan(legacyCallback);}catch(Exception ignored){}
+  if(!ok){legacyScanning=false;scanning=false;listener.onStatus("تعذر بدء BLE على هذه الشاشة • أعد تشغيل Bluetooth");return;}
+  handler.postDelayed(new Runnable(){@Override public void run(){if(legacyScanning){stopScanOnly();listener.onStatus("انتهى بحث T3 • لم تظهر الثلاجة");}}},SCAN_MS);
+ }
+
+ private static boolean isStrongLegacyMatch(String n,String addr){
+  if(addr!=null&&addr.toUpperCase(Locale.US).startsWith(ICECO_PREFIX))return true;
+  if(n!=null){String x=n.toLowerCase(Locale.US);return x.contains("refriger")||x.contains("fridge")||x.contains("iceco")||x.contains("alpicool")||x.contains("freezer");}
+  return false;
+ }
 
  private void connect(ScanResult r,String reason){
   BluetoothDevice d=r.getDevice(); String n=d.getName(); String label=(n==null||n.trim().isEmpty())?"BLE device":n;
