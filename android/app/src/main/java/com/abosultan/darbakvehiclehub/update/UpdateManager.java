@@ -45,7 +45,7 @@ public final class UpdateManager {
                 new AlertDialog.Builder(activity).setTitle("تحديث متاح • v"+fv)
                     .setMessage(fn.length()==0?"نسخة أحدث متاحة.":fn)
                     .setNegativeButton("لاحقًا",null)
-                    .setPositiveButton("تحميل", (d,w)->activity.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(fu))))
+                    .setPositiveButton("تحديث الآن", (d,w)->downloadAndInstall(fu))
                     .show();
             }});
         }}).start();
