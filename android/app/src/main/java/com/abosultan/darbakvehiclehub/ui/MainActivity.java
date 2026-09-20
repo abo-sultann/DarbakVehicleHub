@@ -53,7 +53,7 @@ public final class MainActivity extends Activity {
     private String fridgeStatus = "غير متصلة";
     private String fridgeDevice = "—";
     private String fridgeGatt = "—";
-    private String fridgeProtocol = "—";
+    private String fridgeProtocol = "—";\n    private AlertDialog fridgeDialog;
 
     private final Runnable simulator = new Runnable() {
         @Override public void run() {
@@ -120,10 +120,10 @@ public final class MainActivity extends Activity {
         });
 
         fridgeBle = new FridgeBleManager(this, new FridgeBleManager.Listener() {
-            @Override public void onStatus(final String s) { runOnUiThread(new Runnable(){ @Override public void run(){ fridgeStatus=s; chipFridge.setText("❄ الثلاجة • "+s); }}); }
-            @Override public void onDevice(final String n) { fridgeDevice=n; }
-            @Override public void onGattProfile(final String p) { fridgeGatt=p; }
-            @Override public void onProtocol(final String p) { fridgeProtocol=p; }
+            @Override public void onStatus(final String s) { runOnUiThread(new Runnable(){ @Override public void run(){ fridgeStatus=s; chipFridge.setText("❄ الثلاجة • "+s); refreshFridgeDialog(); }}); }
+            @Override public void onDevice(final String n) { runOnUiThread(new Runnable(){@Override public void run(){fridgeDevice=n; refreshFridgeDialog();}}); }
+            @Override public void onGattProfile(final String p) { runOnUiThread(new Runnable(){@Override public void run(){fridgeGatt=p; refreshFridgeDialog();}}); }
+            @Override public void onProtocol(final String p) { runOnUiThread(new Runnable(){@Override public void run(){fridgeProtocol=p; refreshFridgeDialog();}}); }
         });
         render(System.currentTimeMillis());
     }
@@ -144,7 +144,7 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == 702 && fridgeBle != null) {
-            if (fridgeBle.bluetoothState() == 2) fridgeBle.startScan();
+            if (fridgeBle.bluetoothState() == 2) { fridgeBle.startScan(); refreshFridgeDialog(); }
             else fridgeStatus = "Bluetooth ما زال متوقفًا";
         }
     }
@@ -262,23 +262,48 @@ public final class MainActivity extends Activity {
     }
 
     private void showFridgeStatus() {
-        if (fridgeBle != null && !fridgeBle.hasLocationPermission()) {
-            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 701);
-        } else if (fridgeBle != null) {
-            fridgeBle.startScan();
+        if (fridgeDialog == null || !fridgeDialog.isShowing()) {
+            fridgeDialog = new AlertDialog.Builder(this)
+                    .setTitle("الثلاجة • Fridge Engine")
+                    .setMessage(fridgeMessage())
+                    .setNegativeButton("إغلاق", null)
+                    .setPositiveButton("إعادة البحث", null)
+                    .create();
+            fridgeDialog.setOnShowListener(new android.content.DialogInterface.OnShowListener() {
+                @Override public void onShow(android.content.DialogInterface dialog) {
+                    fridgeDialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
+                        @Override public void onClick(View v) { startFridgeDiscovery(); }
+                    });
+                }
+            });
+            fridgeDialog.show();
         }
+        startFridgeDiscovery();
+    }
 
-        String message = "الحالة: " + fridgeStatus
-                + "\nالجهاز: " + fridgeDevice
-                + "\nالبروتوكول: " + fridgeProtocol
-                + "\n\nGATT المكتشف:\n" + fridgeGatt
-                + "\n\nالاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.";
+    private void startFridgeDiscovery() {
+        if (fridgeBle == null) return;
+        if (!fridgeBle.hasLocationPermission()) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 701);
+            return;
+        }
+        if (fridgeBle.bluetoothState() == 1) {
+            fridgeBle.requestEnableBluetooth();
+            return;
+        }
+        fridgeBle.startScan();
+    }
 
-        new AlertDialog.Builder(this)
-                .setTitle("الثلاجة • Fridge Engine")
-                .setMessage(message)
-                .setPositiveButton("إغلاق", null)
-                .show();
+    private String fridgeMessage() {
+        return "الحالة: " + fridgeStatus
+                + "\\nالجهاز: " + fridgeDevice
+                + "\\nالبروتوكول: " + fridgeProtocol
+                + "\\n\\nGATT المكتشف:\\n" + fridgeGatt
+                + "\\n\\nالاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.";
+    }
+
+    private void refreshFridgeDialog() {
+        if (fridgeDialog != null && fridgeDialog.isShowing()) fridgeDialog.setMessage(fridgeMessage());
     }
 
     private void showDiagnostics() {
