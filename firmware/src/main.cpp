@@ -87,8 +87,12 @@ void storeFrame(const twai_message_t& m) {
 
 bool initCapture() {
   if (!SPIFFS.begin(false)) {
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"spiffs_mount_failed\"}");
-    return false;
+    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"spiffs_mount_failed_formatting\"}");
+    if (!SPIFFS.format() || !SPIFFS.begin(false)) {
+      Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"spiffs_unavailable\"}");
+      return false;
+    }
+    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"spiffs_formatted\"}");
   }
 
   // Each power-up is a fresh field-test session. This prevents old CAN data\n  // from being mixed with the next vehicle capture.\n  if (SPIFFS.exists(CAPTURE_FILE)) SPIFFS.remove(CAPTURE_FILE);\n  captureBytes = 0;\n\n  captureFile = SPIFFS.open(CAPTURE_FILE, FILE_WRITE);
