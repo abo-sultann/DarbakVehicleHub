@@ -1,6 +1,7 @@
 {
-  "versionCode": 3,
-  "versionName": "0.3.0",
-  "downloadUrl": "https://drive.google.com/file/d/1DGY_0DLY6Un53nl18mHEirxiUgafHpcS/view?usp=drivesdk",
-  "notes": "تحسين اكتشاف الثلاجة، تشغيل Bluetooth من التطبيق، تشخيص GATT أوضح، مركز تحديث، وتحسينات الواجهة."
+  "versionCode": 4,
+  "versionName": "0.3.1",
+  "downloadUrl": "https://drive.google.com/file/d/1kc1qZ_159ek5rusr3kmOSEbbaktkV2AT/view?usp=drivesdk",
+  "sha256": "7c058d463c4c509858960ae7c7bebc8d335de4945b1060543558ee5c8e4f5824",
+  "notes": "إصلاح تعليق فحص التحديث، نافذة ثلاجة BLE حية، إصلاح التشخيص، أيقونة Darbak، وتحسين واجهة 1024×600."
 }
