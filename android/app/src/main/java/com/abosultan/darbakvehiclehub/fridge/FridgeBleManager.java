@@ -34,7 +34,8 @@ public final class FridgeBleManager {
  public void startScan(){
   if(!hasLocationPermission()){listener.onStatus("يحتاج إذن الموقع لمسح BLE على Android 7.1");return;}
   BluetoothManager bm=(BluetoothManager)activity.getSystemService(Context.BLUETOOTH_SERVICE); BluetoothAdapter a=bm==null?null:bm.getAdapter();
-  if(a==null){listener.onStatus("Bluetooth غير مدعوم من النظام");return;}\n  if(!a.isEnabled()){listener.onStatus("Bluetooth متوقف • اضغط لتشغيله");return;}
+  if(a==null){listener.onStatus("Bluetooth غير مدعوم من النظام");return;}
+  if(!a.isEnabled()){listener.onStatus("Bluetooth متوقف • اضغط لتشغيله");return;}
   scanner=a.getBluetoothLeScanner(); if(scanner==null){listener.onStatus("BLE Scanner غير متاح");return;}
   stopScan(); bestCandidate=null; scanning=true; listener.onStatus("جاري البحث عن الثلاجة…");
   scanner.startScan(Collections.<ScanFilter>emptyList(),new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build(),scanCallback);
@@ -85,10 +86,12 @@ public final class FridgeBleManager {
  private static String describe(BluetoothGatt g){
   StringBuilder b=new StringBuilder();
   for(BluetoothGattService s:g.getServices()){
-   if(b.length()>0)b.append("\n");
+   if(b.length()>0)b.append("
+");
    b.append("S ").append(s.getUuid());
    for(BluetoothGattCharacteristic c:s.getCharacteristics()){
-    b.append("\n  C ").append(c.getUuid()).append(" [").append(properties(c.getProperties())).append("]");
+    b.append("
+  C ").append(c.getUuid()).append(" [").append(properties(c.getProperties())).append("]");
    }
   }
   return b.length()==0?"لا توجد خدمات":b.toString();
