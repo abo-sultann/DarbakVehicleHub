@@ -304,38 +304,22 @@ public final class MainActivity extends Activity {
 
     private void showDiagnostics() {
         long now = System.currentTimeMillis();
+        String nl = System.getProperty("line.separator");
         StringBuilder text = new StringBuilder();
         text.append("حالة CAN: ")
-                .append(lastFrameAtMs > 0L && now - lastFrameAtMs <= TelemetryState.DEFAULT_STALE_AFTER_MS ? "متصل/محاكاة" : "غير متصل")
-                .append('
-');
-        text.append("آخر إطار: ").append(formatTime(lastFrameAtMs)).append('
-');
-        text.append("حساسات TPMS المكتشفة: ").append(availableTpmsCount(now)).append(" / 4
-
-");
-        text.append("سرعة السيارة: ").append(readingDiagnostic(telemetry.vehicleSpeedKph, now)).append('
-');
-        text.append("CAN الخام: ").append(readingDiagnostic(telemetry.rawCanSpeedKph, now)).append('
-');
-        text.append("GPS: ").append(readingDiagnostic(telemetry.gpsSpeedKph, now)).append('
-');
-        text.append("السرعة المصححة: ").append(readingDiagnostic(telemetry.correctedSpeedKph, now)).append('
-');
-        text.append("RPM: ").append(readingDiagnostic(telemetry.rpm, now)).append('
-');
-        text.append("حرارة المحرك: ").append(readingDiagnostic(telemetry.coolantC, now)).append('
-');
-        text.append("الفولت: ").append(readingDiagnostic(telemetry.voltage, now)).append("
-
-");
+                .append(lastFrameAtMs > 0L && now - lastFrameAtMs <= TelemetryState.DEFAULT_STALE_AFTER_MS ? "متصل/محاكاة" : "غير متصل").append(nl);
+        text.append("آخر إطار: ").append(formatTime(lastFrameAtMs)).append(nl);
+        text.append("حساسات TPMS المكتشفة: ").append(availableTpmsCount(now)).append(" / 4").append(nl).append(nl);
+        text.append("سرعة السيارة: ").append(readingDiagnostic(telemetry.vehicleSpeedKph, now)).append(nl);
+        text.append("CAN الخام: ").append(readingDiagnostic(telemetry.rawCanSpeedKph, now)).append(nl);
+        text.append("GPS: ").append(readingDiagnostic(telemetry.gpsSpeedKph, now)).append(nl);
+        text.append("السرعة المصححة: ").append(readingDiagnostic(telemetry.correctedSpeedKph, now)).append(nl);
+        text.append("RPM: ").append(readingDiagnostic(telemetry.rpm, now)).append(nl);
+        text.append("حرارة المحرك: ").append(readingDiagnostic(telemetry.coolantC, now)).append(nl);
+        text.append("الفولت: ").append(readingDiagnostic(telemetry.voltage, now)).append(nl).append(nl);
         text.append("آخر خطأ: ").append(lastError);
-
-        new AlertDialog.Builder(this)
-                .setTitle("تشخيص Darbak Vehicle Hub")
-                .setMessage(text.toString())
-                .setPositiveButton("إغلاق", null)
-                .show();
+        new AlertDialog.Builder(this).setTitle("تشخيص Darbak Vehicle Hub")
+                .setMessage(text.toString()).setPositiveButton("إغلاق", null).show();
     }
 
     private static String readingDiagnostic(TelemetryState.IntReading reading, long now) {
