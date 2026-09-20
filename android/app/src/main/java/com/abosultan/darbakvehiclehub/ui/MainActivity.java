@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import com.abosultan.darbakvehiclehub.fridge.FridgeBleManager;
+import com.abosultan.darbakvehiclehub.update.UpdateManager;
 import android.os.Handler;
 import android.view.View;
 import android.view.Window;
@@ -45,6 +46,8 @@ public final class MainActivity extends Activity {
     private TextView chipCan;
     private TextView chipTpms;
     private TextView chipFridge;
+    private TextView chipUpdate;
+    private UpdateManager updateManager;
     private TextView tpmsSummary;
     private FridgeBleManager fridgeBle;
     private String fridgeStatus = "غير متصلة";
@@ -103,7 +106,17 @@ public final class MainActivity extends Activity {
         });
 
         chipFridge.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { showFridgeStatus(); }
+            @Override public void onClick(View v) {
+                if (fridgeBle != null && fridgeBle.bluetoothState() == 1) {
+                    fridgeBle.requestEnableBluetooth();
+                } else {
+                    showFridgeStatus();
+                }
+            }
+        });
+        updateManager = new UpdateManager(this);
+        chipUpdate.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { updateManager.check(); }
         });
 
         fridgeBle = new FridgeBleManager(this, new FridgeBleManager.Listener() {
@@ -126,6 +139,14 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
         if (requestCode == 701 && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED && fridgeBle != null) fridgeBle.startScan();
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == 702 && fridgeBle != null) {
+            if (fridgeBle.bluetoothState() == 2) fridgeBle.startScan();
+            else fridgeStatus = "Bluetooth ما زال متوقفًا";
+        }
     }
 
     @Override protected void onPause() {
@@ -151,6 +172,7 @@ public final class MainActivity extends Activity {
         chipCan = findViewById(R.id.chipCan);
         chipTpms = findViewById(R.id.chipTpms);
         chipFridge = findViewById(R.id.chipFridge);
+        chipUpdate = findViewById(R.id.chipUpdate);
         tpmsSummary = findViewById(R.id.tpmsSummary);
     }
 
