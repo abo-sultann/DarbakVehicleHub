@@ -24,14 +24,14 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="دربك Vehicle Hub"
+                android:text="دربك  •  Vehicle Hub"
                 android:textColor="@color/text_primary"
-                android:textSize="25sp"
+                android:textSize="23sp"
                 android:textStyle="bold" />
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="طريقك أسهل • بوابة بيانات السيارة"
+                android:text="مركز السيارة  •  قراءة وتشخيص آمن"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
@@ -57,7 +57,7 @@
             android:layout_height="wrap_content"
             android:layout_marginLeft="10dp"
             android:background="@drawable/bg_chip"
-            android:text="CAN  •  استماع آمن"
+            android:text="CAN • جاهز"
             android:textColor="@color/success"
             android:textSize="12sp" />
 
@@ -76,7 +76,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:background="@drawable/bg_chip"
-            android:text="TPMS  •  محاكاة"
+            android:text="TPMS • محاكاة"
             android:textColor="@color/blue_glow"
             android:textSize="12sp" />
     </LinearLayout>
@@ -281,7 +281,7 @@
         android:layout_width="match_parent"
         android:layout_height="28dp"
         android:gravity="center_vertical|right"
-        android:text="تصميم وتطوير • أبوسلطان    |    Darbak Core • v0.3.0 • Vehicle + Fridge"
+        android:text="أبوسلطان  •  Darbak Core   |   Vehicle • TPMS • Fridge"
         android:textColor="#7189A3"
         android:textSize="10sp" />
 </LinearLayout>
