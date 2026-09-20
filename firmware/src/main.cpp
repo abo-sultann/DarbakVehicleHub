@@ -54,10 +54,10 @@ String frameJson(const twai_message_t& m) {
            m.data_length_code);
   String line(head);
   line.reserve(120);
-  static const char HEX[] = "0123456789ABCDEF";
+  static const char HEX_DIGITS[] = "0123456789ABCDEF";
   for (uint8_t i = 0; i < m.data_length_code; ++i) {
-    line += HEX[(m.data[i] >> 4) & 0x0F];
-    line += HEX[m.data[i] & 0x0F];
+    line += HEX_DIGITS[(m.data[i] >> 4) & 0x0F];
+    line += HEX_DIGITS[m.data[i] & 0x0F];
   }
   line += "\"}";
   return line;
