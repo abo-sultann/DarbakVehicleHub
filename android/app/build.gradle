@@ -1,6 +1,7 @@
 plugins { id 'com.android.application' }
 
 android {
+    buildFeatures { buildConfig true }
     namespace 'com.abosultan.darbakvehiclehub'
     compileSdk 34
 
