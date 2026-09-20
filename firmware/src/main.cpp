@@ -6,7 +6,6 @@ namespace {
 
 bool canStarted = false;
 uint32_t lastStatusMs = 0;
-uint32_t lastSimMs = 0;
 
 void printlnStatus(const char* canState, const char* tpmsState) {
   Serial.printf("{\"v\":1,\"type\":\"status\",\"can\":\"%s\",\"tpms\":\"%s\"}\n",
@@ -41,16 +40,6 @@ void emitCanFrame(const twai_message_t& m) {
   Serial.println("\"}");
 }
 
-// Keeps Android development unblocked until the physical hub arrives.
-void emitSimulatorData() {
-  static float psi = 34.6f;
-  psi -= 0.02f;
-  if (psi < 33.8f) psi = 34.6f;
-
-  Serial.printf("{\"v\":1,\"type\":\"tpms\",\"pos\":\"FL\",\"psi\":%.1f,\"tempC\":31,\"battery\":\"ok\",\"rssi\":-63}\n", psi);
-  Serial.println("{\"v\":1,\"type\":\"vehicle\",\"speedKph\":82,\"rpm\":1850,\"coolantC\":88,\"voltage\":14.1}");
-}
-
 } // namespace
 
 void setup() {
@@ -58,7 +47,7 @@ void setup() {
   delay(300);
 
   canStarted = startCanListenOnly();
-  printlnStatus(canStarted ? "listen_only" : "unavailable", "simulator");
+  printlnStatus(canStarted ? "listen_only" : "unavailable", "unavailable");
 }
 
 void loop() {
@@ -70,12 +59,8 @@ void loop() {
   }
 
   const uint32_t now = millis();
-  if (now - lastSimMs >= 1000) {
-    lastSimMs = now;
-    emitSimulatorData();
-  }
   if (now - lastStatusMs >= 10000) {
     lastStatusMs = now;
-    printlnStatus(canStarted ? "listen_only" : "unavailable", "simulator");
+    printlnStatus(canStarted ? "listen_only" : "unavailable", "unavailable");
   }
 }
