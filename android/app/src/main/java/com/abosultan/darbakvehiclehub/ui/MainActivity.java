@@ -240,7 +240,23 @@ public final class MainActivity extends Activity {
     }
 
     private void showFridgeStatus() {
-        if (fridgeBle != null && !fridgeBle.hasLocationPermission()) requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 701);\n        else if (fridgeBle != null) fridgeBle.startScan();\n        new AlertDialog.Builder(this)\n                .setTitle("الثلاجة • Fridge Engine")\n                .setMessage("الحالة: "+fridgeStatus+"\\nالجهاز: "+fridgeDevice+"\\nالبروتوكول: "+fridgeProtocol+"\\n\\nGATT المكتشف:\\n"+fridgeGatt+"\\n\\nالاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.")\n                .setPositiveButton("إغلاق", null)\n                .show();
+        if (fridgeBle != null && !fridgeBle.hasLocationPermission()) {
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 701);
+        } else if (fridgeBle != null) {
+            fridgeBle.startScan();
+        }
+
+        String message = "الحالة: " + fridgeStatus
+                + "\nالجهاز: " + fridgeDevice
+                + "\nالبروتوكول: " + fridgeProtocol
+                + "\n\nGATT المكتشف:\n" + fridgeGatt
+                + "\n\nالاكتشاف آمن/قراءة فقط حتى اعتماد البروتوكول.";
+
+        new AlertDialog.Builder(this)
+                .setTitle("الثلاجة • Fridge Engine")
+                .setMessage(message)
+                .setPositiveButton("إغلاق", null)
+                .show();
     }
 
     private void showDiagnostics() {
