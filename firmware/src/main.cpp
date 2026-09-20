@@ -91,18 +91,7 @@ bool initCapture() {
     return false;
   }
 
-  File old = SPIFFS.open(CAPTURE_FILE, FILE_READ);
-  if (old) {
-    captureBytes = old.size();
-    old.close();
-  }
-
-  if (captureBytes >= MAX_CAPTURE_BYTES) {
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"full_at_boot\"}");
-    return false;
-  }
-
-  captureFile = SPIFFS.open(CAPTURE_FILE, FILE_APPEND);
+  // Each power-up is a fresh field-test session. This prevents old CAN data\n  // from being mixed with the next vehicle capture.\n  if (SPIFFS.exists(CAPTURE_FILE)) SPIFFS.remove(CAPTURE_FILE);\n  captureBytes = 0;\n\n  captureFile = SPIFFS.open(CAPTURE_FILE, FILE_WRITE);
   if (!captureFile) {
     Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"open_failed\"}");
     return false;
