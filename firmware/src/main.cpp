@@ -8,7 +8,7 @@ constexpr uint32_t STATUS_MS = 10000;
 constexpr uint32_t FRAME_GAP_US = 6000;
 constexpr size_t MAX_EDGES = 1024;
 constexpr size_t MIN_BURST_EDGES = 16;
-constexpr int STRONG_RSSI_DBM = -70;
+constexpr int STRONG_RSSI_DBM = -70; // diagnostic only; RSSI is sampled after burst
 
 volatile uint32_t edgeUs[MAX_EDGES];
 volatile uint8_t edgeLevel[MAX_EDGES];
@@ -40,7 +40,7 @@ void analyzeBurst() {
   if(n<8)return;
 
   int rssi=ELECHOUSE_cc1101.getRssi();
-  if(n<MIN_BURST_EDGES || rssi<STRONG_RSSI_DBM){++rejectedCount;return;}
+  if(n<MIN_BURST_EDGES){++rejectedCount;return;}
 
   uint32_t bins[6]={0}; uint32_t minUs=0xFFFFFFFF,maxUs=0,sum=0; size_t usable=0;
   for(size_t i=1;i<n;++i){
