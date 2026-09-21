@@ -60,6 +60,16 @@ void analyzeBurst() {
     Serial.print(d); Serial.print(l[i]?'H':'L'); if(i+1<n)Serial.print(',');
   }
   Serial.println();
+  if (n >= 80) {
+    Serial.print("TPMS_SYMBOLS seq="); Serial.print((unsigned long)candidateCount); Serial.print(" q=");
+    for(size_t i=1;i<n;++i){
+      uint32_t d=t[i]-t[i-1];
+      if(d<60 || d>1000) continue;
+      char q = (d < 160) ? '1' : (d < 320 ? '2' : (d > 700 ? 'G' : 'X'));
+      Serial.print(q);
+    }
+    Serial.println();
+  }
 }
 
 void initRadio(){
