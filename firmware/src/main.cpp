@@ -5,7 +5,6 @@
 
 namespace {
 constexpr uint32_t STATUS_MS = 10000;
-constexpr uint32_t STALE_MS = 180000; // provisional until real sensor cadence is captured
 uint32_t lastStatus = 0;
 uint32_t packetCount = 0;
 
@@ -37,7 +36,7 @@ void initRadio() {
 void setup() {
   Serial.begin(SERIAL_BAUD);
   delay(500);
-  Serial.println("{\"v\":1,\"type\":\"boot\",\"mode\":\"tpms_only\",\"obd\":\"disabled\"}");
+  Serial.println("{\"v\":1,\"type\":\"boot\",\"mode\":\"tpms_only\",\"obd\":\"disabled\",\"rf\":\"433.92MHz_discovery\"}");
   initRadio();
   printStatus();
 }
