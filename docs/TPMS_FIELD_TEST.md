@@ -11,8 +11,10 @@ Current priority: external TPMS only. OBD/CAN is paused.
 | MISO | GPIO19 |
 | MOSI | GPIO23 |
 | CSN/SS | GPIO5 |
-| GDO0 | GPIO4 |
-| GDO2 | GPIO2 |
+| GDO0 (module pin 3) | GPIO4 |
+| GDO2 (module pin 8) | GPIO2 |
+
+Purchased module pinout confirmed from its product sheet: 1=GND, 2=VCC, 3=GDO0, 4=CSN, 5=SCK, 6=MOSI, 7=MISO/GDO1, 8=GDO2. Module supply range is 1.8–3.6V, so use ESP32 3.3V only. The board is a CC1101 433 MHz module with adjustable 387–464 MHz range; project target remains 433.92 MHz.
 
 **Do not power the CC1101 from 5V.**
 
