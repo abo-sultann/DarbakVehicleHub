@@ -54,3 +54,9 @@ Because the manual does not document RF modulation, data rate, sync word, encodi
 - One sensor: stop/remove its RF source long enough to validate stale/offline behavior.
 
 Never intentionally reduce a tire below a safe operating pressure for protocol discovery. A small controlled change can be performed on an unmounted/test sensor arrangement or by using normal service procedures and the original receiver as reference.
+
+
+## Early go/no-go gate (avoid wasted effort)
+Before building any Android decoder/UI integration, prove the RF path first. GO requires repeatable packets attributable to the purchased sensor and observable changes when that same sensor transmits. If the current packet-mode profile yields no reliable packets, do not conclude the project failed: switch the CC1101 discovery method/profile (modulation, bandwidth/data-rate/sync, or raw/asynchronous GDO capture) and retest at the manual-confirmed 433.92 MHz. Only after repeatable sensor-specific RF is captured should decoder implementation proceed.
+
+Stop conditions: do not spend time on Android integration, wheel UI, or production stale timers while RF capture is unproven. This keeps failure cheap and early.
