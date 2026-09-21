@@ -40,3 +40,17 @@ Do not merge a production decoder until captures prove stable sensor ID mapping,
 The supplied TPMS manual confirms the external valve sensor transmits at **433.92 MHz**. Other documented sensor specifications: pressure range 0–6.08 bar, pressure accuracy 0.18 bar, temperature accuracy ±2°C, transmit power ≤5 dBm, and CR1632 replaceable battery. This confirms the project radio center frequency is correct; modulation, symbol rate, framing and payload layout still require RF captures and must not be guessed.
 
 The original receiver supports four wheel positions (F.L/F.R/R.L/R.R), pressure-unit selection (bar/psi), temperature-unit selection (°C/°F), configurable pressure/temperature alarms, tire exchange, and tire matching. These receiver features are useful behavioral references but do not define the RF packet format.
+
+
+## Decoder evidence plan
+Use the original solar receiver as the ground-truth display during RF capture. For one sensor at a time, record repeated packets at several known pressure states and note the receiver's displayed pressure and temperature at each state. Compare only packets with the same sensor ID candidate. A field is accepted as pressure/temperature only when its decoded change tracks the receiver across multiple captures. Wheel identity is learned from repeated per-wheel captures, not assumed from packet order.
+
+Because the manual does not document RF modulation, data rate, sync word, encoding, packet length, sensor ID layout, checksum/CRC, or transmit cadence, none of these are production constants yet. The current CC1101 ASK/OOK profile is discovery-only and must be changed if real captures show otherwise.
+
+### Minimum capture matrix
+- FL: normal pressure, then a small controlled pressure change, then restored pressure.
+- FR/RL/RR: at least one stable capture each for ID separation.
+- One sensor: capture long enough to measure normal transmit cadence.
+- One sensor: stop/remove its RF source long enough to validate stale/offline behavior.
+
+Never intentionally reduce a tire below a safe operating pressure for protocol discovery. A small controlled change can be performed on an unmounted/test sensor arrangement or by using normal service procedures and the original receiver as reference.
