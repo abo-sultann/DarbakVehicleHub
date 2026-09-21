@@ -7,6 +7,8 @@ namespace {
 constexpr uint32_t STATUS_MS = 10000;
 uint32_t lastStatus = 0;
 uint32_t packetCount = 0;
+uint32_t activityCount = 0;
+uint32_t lastActivityMs = 0;
 
 void printStatus() {
   Serial.printf("{\"v\":1,\"type\":\"status\",\"mode\":\"tpms_only\",\"rf_mhz\":%.2f,\"packets\":%lu}\n",
@@ -42,6 +44,19 @@ void setup() {
 }
 
 void loop() {
+  // First prove that the purchased sensor is audible at 433.92 MHz.
+  // RSSI activity does not require knowing the TPMS packet format.
+  int rssiNow = ELECHOUSE_cc1101.getRssi();
+  uint32_t now = millis();
+  if (rssiNow > -75 && now - lastActivityMs > 80) {
+    lastActivityMs = now;
+    ++activityCount;
+    Serial.print("RF_ACTIVITY rssi=");
+    Serial.print(rssiNow);
+    Serial.print(" count=");
+    Serial.println(activityCount);
+  }
+
   if (ELECHOUSE_cc1101.CheckRxFifo(100)) {
     byte buf[64]{};
     int len = ELECHOUSE_cc1101.ReceiveData(buf);
@@ -51,6 +66,6 @@ void loop() {
     }
     ELECHOUSE_cc1101.SetRx();
   }
-  uint32_t now=millis();
+  now=millis();
   if(now-lastStatus>=STATUS_MS){lastStatus=now;printStatus();}
 }
