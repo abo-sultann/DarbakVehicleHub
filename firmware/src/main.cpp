@@ -5,67 +5,98 @@
 
 namespace {
 constexpr uint32_t STATUS_MS = 10000;
-uint32_t lastStatus = 0;
-uint32_t packetCount = 0;
-uint32_t activityCount = 0;
-uint32_t lastActivityMs = 0;
+constexpr uint32_t FRAME_GAP_US = 6000;
+constexpr size_t MAX_EDGES = 1024;
 
-void printStatus() {
-  Serial.printf("{\"v\":1,\"type\":\"status\",\"mode\":\"tpms_only\",\"rf_mhz\":%.2f,\"packets\":%lu}\n",
-                TPMS_CENTER_MHZ, (unsigned long)packetCount);
+volatile uint32_t edgeUs[MAX_EDGES];
+volatile uint8_t edgeLevel[MAX_EDGES];
+volatile size_t edgeCount = 0;
+volatile uint32_t lastEdgeUs = 0;
+volatile bool overflowed = false;
+
+uint32_t lastStatus = 0;
+uint32_t rawFrameCount = 0;
+
+void IRAM_ATTR onGdo0Edge() {
+  uint32_t now = micros();
+  size_t i = edgeCount;
+  if (i < MAX_EDGES) {
+    edgeUs[i] = now;
+    edgeLevel[i] = (uint8_t)digitalRead(PIN_CC1101_GDO0);
+    edgeCount = i + 1;
+    lastEdgeUs = now;
+  } else {
+    overflowed = true;
+  }
 }
 
-void printRaw(const byte* data, int len, int rssi, byte lqi) {
-  Serial.printf("{\"v\":1,\"type\":\"tpms_raw\",\"ms\":%lu,\"rssi\":%d,\"lqi\":%u,\"len\":%d,\"data\":\"",
-                (unsigned long)millis(), rssi, lqi, len);
-  static const char hex[]="0123456789ABCDEF";
-  for (int i=0;i<len;i++){ Serial.print(hex[(data[i]>>4)&15]); Serial.print(hex[data[i]&15]); }
-  Serial.println("\"}");
+void printStatus() {
+  Serial.printf("{\"v\":1,\"type\":\"status\",\"mode\":\"tpms_raw_async\",\"rf_mhz\":%.2f,\"raw_frames\":%lu}\n",
+                TPMS_CENTER_MHZ, (unsigned long)rawFrameCount);
+}
+
+void emitFrame() {
+  noInterrupts();
+  size_t n = edgeCount;
+  bool ov = overflowed;
+  static uint32_t t[MAX_EDGES];
+  static uint8_t l[MAX_EDGES];
+  if (n > MAX_EDGES) n = MAX_EDGES;
+  for (size_t i = 0; i < n; ++i) { t[i] = edgeUs[i]; l[i] = edgeLevel[i]; }
+  edgeCount = 0;
+  overflowed = false;
+  interrupts();
+
+  if (n < 8) return;
+  ++rawFrameCount;
+  Serial.printf("RAW_FRAME n=%u overflow=%u rssi=%d us=", (unsigned)n, ov ? 1 : 0, ELECHOUSE_cc1101.getRssi());
+  for (size_t i = 1; i < n; ++i) {
+    Serial.print((unsigned long)(t[i] - t[i - 1]));
+    Serial.print(l[i] ? 'H' : 'L');
+    if (i + 1 < n) Serial.print(',');
+  }
+  Serial.println();
 }
 
 void initRadio() {
   SPI.begin(PIN_CC1101_SCK, PIN_CC1101_MISO, PIN_CC1101_MOSI, PIN_CC1101_CSN);
   ELECHOUSE_cc1101.setSpiPin(PIN_CC1101_SCK, PIN_CC1101_MISO, PIN_CC1101_MOSI, PIN_CC1101_CSN);
   ELECHOUSE_cc1101.Init();
+  ELECHOUSE_cc1101.setGDO0(PIN_CC1101_GDO0);
   ELECHOUSE_cc1101.setMHZ(TPMS_CENTER_MHZ);
-  // Discovery profile. Modulation/rate will be tightened after captures from the purchased sensors.
-  ELECHOUSE_cc1101.setModulation(2); // ASK/OOK
+  ELECHOUSE_cc1101.setModulation(2); // ASK/OOK discovery
   ELECHOUSE_cc1101.setRxBW(325.0);
+  ELECHOUSE_cc1101.setSyncMode(0);   // no sync qualifier
+  ELECHOUSE_cc1101.setPktFormat(3);  // asynchronous serial: demodulated data on GDO
   ELECHOUSE_cc1101.SetRx();
+
+  pinMode(PIN_CC1101_GDO0, INPUT);
+  attachInterrupt(digitalPinToInterrupt(PIN_CC1101_GDO0), onGdo0Edge, CHANGE);
 }
 }
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
   delay(500);
-  Serial.println("{\"v\":1,\"type\":\"boot\",\"mode\":\"tpms_only\",\"obd\":\"disabled\",\"rf\":\"433.92MHz_discovery\"}");
+  Serial.println("{\"v\":1,\"type\":\"boot\",\"mode\":\"tpms_raw_async\",\"rf\":\"433.92MHz\",\"gdo0\":4}");
   initRadio();
   printStatus();
 }
 
 void loop() {
-  // First prove that the purchased sensor is audible at 433.92 MHz.
-  // RSSI activity does not require knowing the TPMS packet format.
-  int rssiNow = ELECHOUSE_cc1101.getRssi();
-  uint32_t now = millis();
-  if (rssiNow > -75 && now - lastActivityMs > 80) {
-    lastActivityMs = now;
-    ++activityCount;
-    Serial.print("RF_ACTIVITY rssi=");
-    Serial.print(rssiNow);
-    Serial.print(" count=");
-    Serial.println(activityCount);
-  }
+  uint32_t nowUs = micros();
+  size_t n;
+  uint32_t last;
+  noInterrupts();
+  n = edgeCount;
+  last = lastEdgeUs;
+  interrupts();
 
-  if (ELECHOUSE_cc1101.CheckRxFifo(100)) {
-    byte buf[64]{};
-    int len = ELECHOUSE_cc1101.ReceiveData(buf);
-    if (len > 0) {
-      ++packetCount;
-      printRaw(buf, len, ELECHOUSE_cc1101.getRssi(), ELECHOUSE_cc1101.getLqi());
-    }
-    ELECHOUSE_cc1101.SetRx();
+  if (n >= 8 && (uint32_t)(nowUs - last) > FRAME_GAP_US) emitFrame();
+
+  uint32_t now = millis();
+  if (now - lastStatus >= STATUS_MS) {
+    lastStatus = now;
+    printStatus();
   }
-  now=millis();
-  if(now-lastStatus>=STATUS_MS){lastStatus=now;printStatus();}
 }
