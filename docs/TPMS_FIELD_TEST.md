@@ -34,3 +34,9 @@ At boot, cached pressure must not become live until a fresh valid RF packet is r
 
 ## Acceptance gate
 Do not merge a production decoder until captures prove stable sensor ID mapping, pressure conversion against the existing TPMS display/gauge, temperature conversion where transmitted, battery/status interpretation where transmitted, integrity/checksum validation if present, and stale/offline behavior after RF stops.
+
+
+## Purchased TPMS sensor confirmed specifications
+The supplied TPMS manual confirms the external valve sensor transmits at **433.92 MHz**. Other documented sensor specifications: pressure range 0–6.08 bar, pressure accuracy 0.18 bar, temperature accuracy ±2°C, transmit power ≤5 dBm, and CR1632 replaceable battery. This confirms the project radio center frequency is correct; modulation, symbol rate, framing and payload layout still require RF captures and must not be guessed.
+
+The original receiver supports four wheel positions (F.L/F.R/R.L/R.R), pressure-unit selection (bar/psi), temperature-unit selection (°C/°F), configurable pressure/temperature alarms, tire exchange, and tire matching. These receiver features are useful behavioral references but do not define the RF packet format.
