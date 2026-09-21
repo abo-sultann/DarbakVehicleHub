@@ -5,3 +5,7 @@ local.properties
 .pio/
 .DS_Store
 *.iml
+__pycache__/
+dist/
+TPMS_ONE_TEST_*/
+TPMS_ONE_TEST_*.zip
