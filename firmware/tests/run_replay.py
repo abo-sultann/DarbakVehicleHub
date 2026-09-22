@@ -18,6 +18,12 @@ EXPECTED = {
         "15B9C582010153261BAB": 2,
         "15B9C58201005C271BB4": 5,
     },
+    "TPMS_LIVE_20260922.pulses.txt": {
+        "15B99AA401C05C231C68": 1,
+        "15B99AA401C144231C51": 1,
+        "15B99AA401C147201C51": 1,
+        "15B99AA401C11A241C28": 1,
+    },
 }
 
 with tempfile.TemporaryDirectory() as directory:

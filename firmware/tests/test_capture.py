@@ -3,6 +3,7 @@ import importlib.util
 import json
 from pathlib import Path
 import queue
+import subprocess
 import tempfile
 import time
 from types import SimpleNamespace
@@ -11,7 +12,7 @@ from unittest.mock import patch
 import zipfile
 import sys
 sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
-from tpms_calibration import analyze, associate
+from tpms_calibration import analyze, analyze_session, associate, feedback
 
 spec = importlib.util.spec_from_file_location("capture", Path(__file__).parents[1] / "tools/tpms_capture.py")
 tool = importlib.util.module_from_spec(spec)
@@ -38,11 +39,104 @@ class CalibrationTest(unittest.TestCase):
     def test_association_rejects_stale_mixed_and_transitions(self):
         r = self.ref(100)
         self.assertEqual(associate([self.frame(99)], [r])[0]['status'], 'linked')
-        self.assertEqual(associate([self.frame(80)], [r])[0]['status'], 'unmatched')
+        late = associate([self.frame(80)], [r])[0]
+        self.assertEqual(late['status'], 'delayed_candidate')
+        self.assertEqual(late['age_seconds'], 20)
+        self.assertEqual(associate([self.frame(-21)], [r])[0]['status'], 'unmatched')
         self.assertEqual(associate([self.frame(99), self.frame(101, sensor=0x83)], [r])[0]['status'], 'ambiguous_sensor')
         self.assertEqual(associate([self.frame(99), self.frame(101, p=200)], [r])[0]['status'], 'ambiguous_payload')
         r['fresh'] = False
         self.assertEqual(associate([self.frame(99)], [r])[0]['status'], 'not_fresh')
+
+    def test_future_packet_cannot_fill_a_missing_prior_reading(self):
+        link = associate([self.frame(102)], [self.ref(100)])[0]
+        self.assertEqual(link['status'], 'unmatched')
+        self.assertEqual(link['reason'], 'no_preceding_frame')
+        self.assertIsNone(link['nearest_frame'])
+        self.assertEqual(link['nearest_following_frame']['delta_seconds'], 2)
+
+    def test_monotonic_clock_survives_wall_clock_adjustment(self):
+        f, r = self.frame(100), self.ref(40)
+        f['host_monotonic_s'], r['host_monotonic_s'] = 10, 12
+        link = associate([f], [r])[0]
+        self.assertEqual(link['status'], 'linked')
+        self.assertEqual(link['clock'], 'host_monotonic_s')
+        self.assertEqual(link['age_seconds'], 2)
+
+    def test_latest_unconfirmed_change_blocks_older_confirmed_value(self):
+        new = self.frame(99, p=250)
+        new['decoded']['repeat_confirmed'] = False
+        link = associate([self.frame(98, p=200), new], [self.ref(101)])[0]
+        self.assertEqual(link['status'], 'ambiguous_payload')
+        self.assertEqual(associate([new], [self.ref(101)])[0]['status'], 'unconfirmed_frame')
+        broken = self.frame(99)
+        broken['decoded']['payload_hex'] = broken['decoded']['payload_hex'][:-2] + 'ff'
+        self.assertEqual(associate([broken], [self.ref(101)])[0]['status'], 'unmatched')
+
+    def test_duplicate_references_cannot_satisfy_minimum_independent_points(self):
+        frames = [self.frame(i*30, 92+i*60, 25+i*3) for i in range(3)]
+        refs = [self.ref(i*30+1, i*10, 25+i*3) for i in range(3)]
+        refs += [self.ref(63, 20, 31)]
+        report = analyze(frames, refs)
+        group = next(iter(report['sensors'].values()))
+        self.assertEqual(report['links'][-1]['duplicate_of'], 3)
+        self.assertEqual(group['pressure']['independent_observations'], 3)
+        self.assertEqual(group['pressure']['status'], 'insufficient_points')
+        self.assertIn('no new calibration point', feedback(report))
+        refs[-1]['pressure_psi'] = 21
+        links = associate(frames, refs)
+        self.assertEqual([r['status'] for r in links[-2:]], ['conflicting_reference']*2)
+
+    def test_separate_bursts_with_same_payload_are_distinct_observations(self):
+        frames = [self.frame(0), self.frame(30)]
+        refs = [self.ref(2), self.ref(32)]
+        links = associate(frames, refs)
+        self.assertTrue(all(r['duplicate_of'] is None for r in links))
+        self.assertNotEqual(links[0]['observation_id'], links[1]['observation_id'])
+
+    def test_invalid_offline_reference_is_never_a_calibration_point(self):
+        for value in [float('nan'), float('inf'), 101, -1]:
+            r = self.ref(100, value)
+            self.assertEqual(associate([self.frame(99)], [r])[0]['status'], 'invalid_reference')
+
+    def test_actual_live_session_keeps_delayed_evidence_without_false_calibration(self):
+        fixture = Path(__file__).parent / 'fixtures/TPMS_LIVE_20260922.jsonl'
+        report = analyze_session(fixture)
+        links = report['links']
+        self.assertEqual([r['status'] for r in links], ['unmatched'] + ['delayed_candidate']*4)
+        self.assertEqual([r['duplicate_of'] for r in links], [None, None, 2, None, 4])
+        self.assertIsNone(links[0]['nearest_frame'])
+        self.assertAlmostEqual(links[0]['nearest_following_frame']['delta_seconds'], 18.985, places=3)
+        self.assertAlmostEqual(links[1]['age_seconds'], 10.468, places=3)
+        group = report['sensors']['15B99AA4']
+        self.assertEqual(group['decoded_records'], 32)
+        self.assertEqual(len(group['raw_payloads']), 5)
+        self.assertEqual(group['changing_byte_indices'], [5, 6, 7])
+        self.assertEqual(group['independent_candidate_observations'], 2)
+        self.assertEqual([r['b5_b6_low9_candidate'] for r in group['raw_points']], [327, 327, 282, 282])
+        self.assertEqual([r['b7_u8'] for r in group['raw_points']], [32, 32, 36, 36])
+        for key in ('pressure', 'temperature'):
+            self.assertEqual(group[key]['status'], 'insufficient_points')
+            self.assertEqual(group['review_only_models'][key]['independent_observations'], 2)
+            self.assertEqual(group['review_only_models'][key]['distinct_reference_values'], 2)
+            self.assertFalse(group['review_only_models'][key]['candidates'])
+        self.assertFalse(report['mapping_verified'])
+        self.assertFalse(group['sensor_id_verified'])
+
+    def test_offline_zip_reanalysis_uses_events_and_preserves_source(self):
+        fixture = Path(__file__).parent / 'fixtures/TPMS_LIVE_20260922.jsonl'
+        with tempfile.TemporaryDirectory() as temp:
+            source, target = Path(temp)/'session.zip', Path(temp)/'new-report.json'
+            with zipfile.ZipFile(source, 'w') as z:
+                z.writestr('serial.jsonl', fixture.read_bytes())
+                z.writestr('calibration.json', '{"obsolete":true}')
+            original = source.read_bytes()
+            cmd = [sys.executable, str(Path(__file__).parents[1]/'tools/tpms_calibration.py'),
+                   str(source), '--out', str(target)]
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            self.assertEqual(json.loads(target.read_text())['schema_version'], 2)
+            self.assertEqual(source.read_bytes(), original)
+            self.assertNotEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
 
     def test_models_use_all_points_and_never_self_approve(self):
         raw = [92, 180, 260, 339, 300]

@@ -12,7 +12,7 @@ import time
 import zipfile
 
 import serial
-from tpms_calibration import analyze
+from tpms_calibration import analyze, feedback
 from serial.tools import list_ports
 
 USB_UART_VIDS = {0x10C4, 0x1A86, 0x0403, 0x303A}
@@ -236,6 +236,7 @@ def archive(folder, capture, metadata, references):
         print(f"Calibration: {len(references)} references; "
               f"{sum(x['status'] == 'linked' for x in report['links'])} unambiguous links. "
               "See calibration.json; firmware mapping remains unverified.")
+        print(feedback(report))
     target = folder.with_suffix(".zip")
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
         for p in sorted(folder.iterdir()):
@@ -290,7 +291,13 @@ def main():
                     print(exc)
                     continue
                 references.append(capture.event("reference", **ref, source="original_tpms_display", freshness_basis="user_confirmed_update"))
-                print(f"Saved reference #{len(references)}; recording continues.")
+                with capture.lock:
+                    frames = list(capture.frames)
+                report = analyze(frames, references)
+                capture.event("calibration_feedback", reference_index=len(references),
+                              association_status=report["links"][-1]["status"],
+                              duplicate_of=report["links"][-1].get("duplicate_of"))
+                print(feedback(report))
         elif a.guided:
             print("\nONE session, three states of the SAME sensor. "
                   "Other fitted sensors may remain in place.\n"
