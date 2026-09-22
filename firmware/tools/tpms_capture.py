@@ -18,14 +18,13 @@ USB_UART_VIDS = {0x10C4, 0x1A86, 0x0403, 0x303A}
 STAGES = [
     ("ambient_off_valve",
      "Remove this sensor from the valve (if fitted), and leave it near the CC1101. "
-     "Use only this same sensor throughout. Wait for the ORIGINAL receiver to update."),
+     "Its battery must be installed now. Keep the same sensor throughout."),
     ("mounted",
-     "Fit the same sensor normally to its tire valve. Wait for a FRESH pressure "
-     "and temperature reading on the ORIGINAL receiver."),
+     "Fit the same sensor normally to its tire valve. Keep the ESP32 nearby. "
+     "The other three sensors may remain fitted; they are recorded separately by candidate ID."),
     ("warm_off_valve",
      "Remove the same sensor and hold its body in your closed hand for about 60 seconds. "
-     "Wait for the ORIGINAL receiver temperature to change, preferably by 2 C or more. "
-     "Do not guess a value if its display has not updated."),
+     "No display or reference reading is required. Do not guess measurements."),
 ]
 
 
@@ -180,10 +179,24 @@ def archive(folder, capture, metadata, references):
     valid_bytes = [bytes.fromhex(p) for p in packets if len(p) == 20]
     if valid_bytes:
         changing = [i for i in range(10) if len({p[i] for p in valid_bytes}) > 1]
+    # Compare fields only within one stable prefix, never across mixed sensors.
+    by_candidate = {}
+    for payload in packets:
+        by_candidate.setdefault(payload[:8], []).append(payload)
+    groups = {}
+    for key, values in by_candidate.items():
+        payload_bytes = [bytes.fromhex(p) for p in values]
+        groups[key] = {
+            "id_verified": False, "wheel_position": None, "unique_payloads": values,
+            "changing_byte_indices": [i for i in range(10)
+                                      if len({p[i] for p in payload_bytes}) > 1],
+        }
     summary = {
         **metadata, "references": references, "serial_error": capture.error if capture else None,
         "decoded_records": len(frames), "unique_payloads": packets,
         "changing_byte_indices": changing, "mapping_verified": False,
+        "by_id_candidate": groups,
+        "stage_labels_are_action_windows_not_sensor_attribution": True,
         "stage_confirmed_repeats": {
             name: sum(f["stage"] == name and f["decoded"].get("repeat_confirmed") is True
                       for f in frames) for name, _ in STAGES
@@ -204,6 +217,8 @@ def main():
     ap.add_argument("--port")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--guided", action="store_true")
+    ap.add_argument("--with-reference", action="store_true",
+                    help="Optional: request readings only when a real reference instrument exists")
     ap.add_argument("--flash", action="store_true")
     ap.add_argument("--label", default="one_sensor")
     ap.add_argument("--seconds", type=float, default=180)
@@ -221,19 +236,22 @@ def main():
         capture = Capture(port, a.baud, folder)
         if a.guided:
             print("\nONE session, three states of the SAME sensor. "
-                  "Set the original display to PSI and Celsius.\n"
-                  "Enter only fresh readings, or - if unavailable. Capture runs during every prompt.")
+                  "Other fitted sensors may remain in place.\n"
+                  "Capture runs during every prompt. No receiver display is assumed.")
             for number, (stage, instruction) in enumerate(STAGES, 1):
                 start = capture.begin(stage)["host_unix_s"]
                 print(f"\n{number}/3: {instruction}")
-                while True:
-                    try:
-                        ref = read_reference(input("Fresh original-display PSI Celsius (or -): "))
-                        break
-                    except ValueError as exc:
-                        print(exc)
-                reference = capture.event("reference", **ref, source="original_receiver")
-                references.append(reference)
+                if a.with_reference:
+                    while True:
+                        try:
+                            ref = read_reference(input("Measured PSI Celsius (or - if unavailable): "))
+                            break
+                        except ValueError as exc:
+                            print(exc)
+                    references.append(capture.event("reference", **ref, source="user_reference"))
+                else:
+                    input("Press Enter when this action is complete: ")
+                    capture.event("stage_action_complete", reference_available=False)
                 capture.wait_for_repeat(start)
             time.sleep(2)  # Keep the end of the last RF burst, too.
             capture.begin("restore")

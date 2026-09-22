@@ -10,7 +10,14 @@ FIXTURES = ROOT / "firmware/tests/fixtures"
 EXPECTED = {
     "TPMS88_CAPTURE.pulses.txt": {"15B99AA401C05C201C65": 3},
     "TPMS89_CAPTURE.pulses.txt": {"15B99AA401C05C211C66": 4},
-    "TPMS_RAW_CAPTURE.pulses.txt": {"15B99AA401C05C201C65": 2},
+    "TPMS_RAW_CAPTURE.pulses.txt": {"15B99AA401C05C201C65": 3},
+    "TPMS_20260922.pulses.txt": {
+        "15B9C58201005C1E1BAB": 1,
+        "15B9C582010153221BA7": 2,
+        "15B9C582010153241BA9": 2,
+        "15B9C582010153261BAB": 2,
+        "15B9C58201005C271BB4": 5,
+    },
 }
 
 with tempfile.TemporaryDirectory() as directory:

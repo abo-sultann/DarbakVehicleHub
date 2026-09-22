@@ -5,6 +5,7 @@ from pathlib import Path
 import queue
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -23,6 +24,23 @@ class FakeSerial:
         except queue.Empty: return b""
 
 class CaptureTest(unittest.TestCase):
+    def test_mixed_sensors_are_not_combined_for_field_comparison(self):
+        packets = ["15B9C582010153221BA7", "15B99AA401C05C201C65"]
+        capture = SimpleNamespace(error=None, frames=[
+            {"stage": "mounted", "decoded": {"payload_hex": p, "repeat_confirmed": True}}
+            for p in packets])
+        with tempfile.TemporaryDirectory() as temp:
+            folder = Path(temp) / "mixed"
+            folder.mkdir()
+            tool.archive(folder, capture, {}, [])
+            summary = json.loads((folder / "summary.json").read_text())
+            groups = summary["by_id_candidate"]
+            self.assertEqual(set(groups), {"15B9C582", "15B99AA4"})
+            for group in groups.values():
+                self.assertEqual(group["changing_byte_indices"], [])
+                self.assertIsNone(group["wheel_position"])
+                self.assertFalse(group["id_verified"])
+
     def test_unknown_and_nonfinite_reference_are_not_measurements(self):
         self.assertIsNone(tool.read_reference("-")["pressure_psi"])
         for value in ["nan 25", "33 inf", "-1 20", "one two", "33"]:

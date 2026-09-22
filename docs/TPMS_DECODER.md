@@ -5,7 +5,22 @@ Receive proof is complete. The original ASK/OOK, 325 kHz RX bandwidth,
 asynchronous GDO0 profile and wiring are retained. RSSI is not an acceptance
 criterion, and is not sampled to reject a completed burst.
 
-## Reproduced result
+## Field correction — 2026-09-22
+
+The owner has sensors only, **no original receiver display**, and three other
+sensors were already fitted during the field session. The field ZIP contained
+14 raw packet dumps but zero on-device decoded records. See
+[the field analysis](TPMS_FIELD_20260922.md).
+
+The corrected decoder replays **12/14 field packets** and **10 old packets**.
+The previous fixed-length gate dropped the last Manchester half-bit when it
+merged into the following measured gap. The new code uses that observed gap
+level, supports 12–16 complete preamble bits, and accepts measured 50–155 us
+short runs. It does not guess the tail when no gap was observed.
+Malformed pairs, short glitches, bad checksums and ambiguous decoding still
+fail. No fixed sensor ID or 0x15 header whitelist is imposed.
+
+## Initial build result (historical, before the field correction)
 
 The production C++ decoder replays **nine complete, integrity-valid packets**
 from three existing recordings. Fixtures preserve the original pulse lists.
@@ -89,18 +104,16 @@ None is a demonstrated full match for these captures. Their engineering units
 are therefore not adopted. This documents bounded source comparison, not a
 claim that no matching implementation exists anywhere.
 
-## Single remaining experiment
+## Existing session and any future capture
 
-One uninterrupted serial session records the same sensor off-valve at ambient
-temperature, fitted normally, then off-valve warmed in a hand. Fresh pressure
-and temperature from the existing receiver are recorded with host timestamps.
-The script keeps raw bytes, text pulse dumps, every decoded packet, checksum
-and repeat status, reference readings, and build identity in one ZIP.
+The requested three-state session has been received and replayed. Do not ask
+the owner to repeat it merely to validate this software fix. Default guided
+capture now asks for actions and Enter only; optional instrument references
+require an explicit `--with-reference` flag. No screen is assumed. Other
+sensors may remain fitted, and each stable ID candidate is grouped separately.
 
-Those measurements are needed to locate/validate the fields and conversion.
-A short session cannot guarantee the sensor transmits a new temperature;
-missing references remain explicitly unavailable. ID width/order may remain
-unresolved even if a stable per-sensor candidate is corroborated.
+Physical units and final ID width remain unverified. The raw field changes
+are evidence for locating fields, not numerical calibration.
 
 ## Verification
 

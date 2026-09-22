@@ -19,6 +19,7 @@ files = {
     root / "firmware/tools/Test-TPMS.ps1": "Test-TPMS.ps1",
     root / "docs/TPMS_FIELD_TEST.md": "READ_ME.md",
     root / "docs/TPMS_DECODER.md": "TPMS_DECODER.md",
+    root / "docs/TPMS_FIELD_20260922.md": "TPMS_FIELD_20260922.md",
 }
 for source, name in files.items():
     shutil.copyfile(source, out / name)

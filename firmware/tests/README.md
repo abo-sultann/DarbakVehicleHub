@@ -18,3 +18,10 @@ g++ -std=c++11 -Wall -Wextra -Werror -Ifirmware/include firmware/tests/replay.cp
 
 Host replay uses the very same header-only decoder included by ESP32 firmware.
 No RF, field mapping, or production measurement claim is implied by a host test.
+
+The 2026-09-22 fixture contains all 14 original packet-scoped pulse lines.
+Its final level is observable: the firmware emitted each line at a gap/idle
+boundary. Replay may therefore use that measured level to complete the last
+Manchester pair. Expected: 12 packets; the 25 us glitch and the malformed
+Manchester packet remain rejected. The shorter-preamble fix also recovers
+one additional unchanged payload from the old RAW capture (10 old total).

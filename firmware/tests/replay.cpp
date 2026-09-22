@@ -1,4 +1,5 @@
 #include "TpmsDecoder.h"
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <fstream>
@@ -19,17 +20,19 @@ std::string hex(const tpms::Frame &f) {
                          << std::setfill('0') << unsigned(b);
   return s.str();
 }
-std::vector<bool> encode(const Bytes &bytes, bool invert = false, bool partial = true) {
+std::vector<bool> encode(const Bytes &bytes, bool invert = false, bool partial = true,
+                         size_t prefixBits = 16) {
   std::vector<bool> chips;
-  for (size_t i = 0; i < 96; ++i) {
-    bool bit = i < 16 ? false : (bytes[(i-16)/8] >> ((i-16)%8)) & 1;
+  for (size_t i = 0; i < prefixBits + 80; ++i) {
+    bool bit = i < prefixBits ? false : (bytes[(i-prefixBits)/8] >> ((i-prefixBits)%8)) & 1;
     chips.push_back(bit ^ invert);
     chips.push_back(!bit ^ invert);
   }
   if (partial) chips.erase(chips.begin());
   return chips;
 }
-bool receive(tpms::Decoder &decoder, const std::vector<bool> &chips, tpms::Frame &out) {
+bool receive(tpms::Decoder &decoder, const std::vector<bool> &chips, tpms::Frame &out,
+             bool gapLevel = false, bool observedGap = true) {
   for (size_t i = 0; i < chips.size();) {
     size_t end = i + 1;
     while (end < chips.size() && chips[end] == chips[i]) ++end;
@@ -38,11 +41,24 @@ bool receive(tpms::Decoder &decoder, const std::vector<bool> &chips, tpms::Frame
     decoder.pulse(duration, chips[i], out);
     i = end;
   }
-  return decoder.pulse(925, false, out);
+  return observedGap ? decoder.pulse(925, gapLevel, out) : decoder.finish(out);
 }
 void selfTest() {
   const Bytes known = {0x15,0xB9,0x9A,0xA4,0x01,0xC0,0x5C,0x21,0x1C,0x66};
   tpms::Frame out;
+  // Real field payload ends in checksum MSB=1: the last low half-bit merges
+  // into the interpacket gap. The old 191/192-chip gate rejected every copy.
+  const Bytes field = {0x15,0xB9,0xC5,0x82,0x01,0x01,0x53,0x22,0x1B,0xA7};
+  for (bool invert : {false, true}) for (size_t prefix : {13u, 16u}) {
+    auto chips = encode(field, invert, true, prefix);
+    chips.pop_back();
+    tpms::Decoder good, wrongGap, missingGap;
+    require(receive(good, chips, out, invert), "measured gap supplies final half-bit");
+    require(hex(out) == "15B9C582010153221BA7", "field payload exact");
+    require(out.gapTail && out.preambleBits == prefix-1, "framing diagnostics");
+    require(!receive(wrongGap, chips, out, !invert), "wrong gap level rejected");
+    require(!receive(missingGap, chips, out, invert, false), "no invented tail without gap");
+  }
   for (bool invert : {false, true}) for (bool partial : {false, true}) {
     tpms::Decoder d;
     require(receive(d, encode(known, invert, partial), out), "polarity/preamble/jitter");
@@ -90,6 +106,17 @@ void selfTest() {
     require(r.observe(a, 20) == 2, "repeat across clock wrap");
     require(r.observe(a, 2021) == 1, "old data cannot confirm new burst");
   }
+  {
+    tpms::Repeats r;
+    tpms::Frame sensors[4];
+    for (unsigned i = 0; i < 4; ++i) {
+      std::copy(field.begin(), field.end(), sensors[i].bytes);
+      sensors[i].bytes[3] += i;
+      require(r.observe(sensors[i], i*20) == 1, "four sensors separately unconfirmed");
+    }
+    for (unsigned i = 0; i < 4; ++i)
+      require(r.observe(sensors[i], 100+i*20) == 2, "interleaved sensors separately confirmed");
+  }
   std::cerr << "Decoder self-tests passed\n";
 }
 int main(int argc, char **argv) {
@@ -108,12 +135,17 @@ int main(int argc, char **argv) {
       if (start == std::string::npos) continue;
       const auto pulses = line.substr(start + skip);
       tpms::Decoder decoder; tpms::Frame frame;
+      bool lastAfter = false;
       for (std::sregex_iterator i(pulses.begin(), pulses.end(), token), end; i != end; ++i) {
+        lastAfter = (*i)[2] == "H";
         // Legacy labels describe the NEW level, opposite of the held level.
         if (decoder.pulse(std::stoul((*i)[1]), (*i)[2] == "L", frame))
           std::cout << argv[arg] << ':' << lineNumber << ' ' << hex(frame) << '\n';
       }
-      if (decoder.finish(frame))
+      // scope=packet is only emitted after a measured gap or sustained idle.
+      const bool valid = line.find("scope=packet") != std::string::npos
+          ? decoder.finishGap(lastAfter, frame) : decoder.finish(frame);
+      if (valid)
         std::cout << argv[arg] << ':' << lineNumber << ' ' << hex(frame) << '\n';
     }
   }

@@ -71,10 +71,13 @@ void emitFrame(const tpms::Frame &frame) {
                 "\"integrity\":\"SUM8\",\"repeats\":%u,\"repeat_confirmed\":%s,"
                 "\"id_candidate\":\"%02X%02X%02X%02X\",\"id_candidate_range\":\"bytes_0_3\","
                 "\"sensor_id\":null,\"pressure_psi\":null,\"temperature_c\":null,"
+                "\"preamble_bits\":%u,\"gap_tail\":%s,\"raw_b5_b6\":%u,\"raw_b7\":%u,"
                 "\"mapping_verified\":false}\n",
     (unsigned long)++frameSequence, (unsigned long)millis(), payload,
     count, count >= 2 ? "true" : "false",
-    frame.bytes[0], frame.bytes[1], frame.bytes[2], frame.bytes[3]);
+    frame.bytes[0], frame.bytes[1], frame.bytes[2], frame.bytes[3],
+    frame.preambleBits, frame.gapTail ? "true" : "false",
+    (unsigned(frame.bytes[5]) << 8) | frame.bytes[6], unsigned(frame.bytes[7]));
 }
 
 void finishRaw(bool valid) {
@@ -163,7 +166,7 @@ void loop() {
   portEXIT_CRITICAL(&edgeMux);
   if (empty && havePrevious && (uint32_t)(micros() - last) > IDLE_US) {
     tpms::Frame frame;
-    const bool valid = decoder.finish(frame);
+    const bool valid = decoder.finishGap(previous.after != 0, frame);
     if (valid) emitFrame(frame);
     finishRaw(valid);
     havePrevious = false;
