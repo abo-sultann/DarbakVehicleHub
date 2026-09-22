@@ -196,10 +196,26 @@ def raw_fields(b):
             'b5_remaining_bits': b[5] & 0xfe, 'b7_u8': b[7], 'b8_u8': b[8]}
 
 
-def analyze(frames, references):
-    links = associate(frames, references)
+def analyze(frames, references, baseline=None):
+    # Session clocks are unrelated after a reboot: associate each separately,
+    # then combine evidence for fitting. Never bind a new entry to old RF.
+    baseline_frames, baseline_refs = split_records(baseline or [])
+    links = associate(baseline_frames, baseline_refs)
+    for link in links:
+        link['session'] = 'baseline'
+        if link.get('observation_id'):
+            link['observation_id'] = 'baseline:' + link['observation_id']
+    current_links = associate(frames, references)
+    for link in current_links:
+        link['session'] = 'current'
+        link['reference_index'] += len(baseline_refs)
+        if link.get('duplicate_of') is not None:
+            link['duplicate_of'] += len(baseline_refs)
+        if link.get('observation_id'):
+            link['observation_id'] = 'current:' + link['observation_id']
+    links += current_links
     groups = {}
-    for frame in frames:
+    for frame in baseline_frames + frames:
         if valid_frame(frame, require_repeat=False):
             groups.setdefault(payload(frame)[:8], []).append(frame)
     analyses = {}
@@ -219,6 +235,7 @@ def analyze(frames, references):
             'byte_values': {str(i): sorted({b[i] for b in data}) for i in range(9)},
             'raw_payloads': [{'payload_hex': p, **raw_fields(b)} for p, b in zip(packets, data)],
             'raw_points': [{'reference_index': r['reference_index'], 'reference': r['reference'],
+                            'session': r['session'],
                             'association_status': r['status'], 'age_seconds': r['age_seconds'],
                             'duplicate_of': r['duplicate_of'], 'observation_id': r['observation_id'],
                             'payload_hex': payload(r['nearest_frame']),
@@ -230,6 +247,7 @@ def analyze(frames, references):
                                   'temperature': candidates(rows, 'temperature_c', 1.0)},
         }
     return {'schema_version': 2, 'mapping_verified': False,
+            'baseline_references': len(baseline_refs), 'current_references': len(references),
             'association_window_seconds': LINK_WINDOW, 'review_window_seconds': REVIEW_WINDOW,
             'association_basis': 'preceding repeated RF burst vs fresh user entry; delay is not verified',
             'links': links, 'sensors': analyses,
@@ -242,20 +260,22 @@ def analyze(frames, references):
                            'All models are hypotheses; no firmware mapping is automatically enabled.']}
 
 
-def feedback(report):
+def feedback(report, show_last_reference=True):
     """Small enough to display after each entry while RF capture keeps running."""
     if not report['links']:
         return 'No references yet. Enter fresh PSI Celsius after a display update; q saves.'
     link = report['links'][-1]
-    lines = [f"Reference #{link['reference_index']} saved: {link['status']}."]
+    lines = []
+    if show_last_reference:
+        lines.append(f"Reference #{link['reference_index']} saved: {link['status']}.")
     prior = link.get('nearest_preceding_frame')
-    if prior:
+    if prior and show_last_reference:
         lines.append(f"Previous RF {prior['payload_hex']} was {link['age_seconds']:.1f}s before Enter.")
-    if link.get('duplicate_of') is not None:
+    if link.get('duplicate_of') is not None and show_last_reference:
         lines.append(f"Same RF observation as reference #{link['duplicate_of']}; no new calibration point.")
-    if link['status'] == 'delayed_candidate':
+    if link['status'] == 'delayed_candidate' and show_last_reference:
         lines.append('Timing needs review; raw data and this reading are retained.')
-    elif link['status'] != 'linked':
+    elif link['status'] != 'linked' and show_last_reference:
         lines.append('This reading cannot currently calibrate units: ' + link.get('reason', link['status']) + '.')
     for sensor, group in report['sensors'].items():
         p, t = (group['review_only_models'][key] for key in ('pressure', 'temperature'))
@@ -268,18 +288,28 @@ def feedback(report):
     return '\n'.join(lines)
 
 
+def split_records(records):
+    return ([r for r in records if (r.get('decoded') or {}).get('type') == 'tpms_frame'],
+            [r for r in records if r.get('event') == 'reference'])
+
+
+def read_records(raw):
+    return [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+
 def analyze_session(source):
     """Reprocess original events, never trust an older derived calibration.json."""
     source = Path(source)
+    baseline = []
     if source.suffix.lower() == '.zip':
         with zipfile.ZipFile(source) as archive:
             raw = archive.read('serial.jsonl').decode('utf-8-sig')
+            if 'baseline.jsonl' in archive.namelist():
+                baseline = read_records(archive.read('baseline.jsonl').decode('utf-8-sig'))
     else:
         raw = source.read_text(encoding='utf-8-sig')
-    records = [json.loads(line) for line in raw.splitlines() if line.strip()]
-    frames = [r for r in records if (r.get('decoded') or {}).get('type') == 'tpms_frame']
-    refs = [r for r in records if r.get('event') == 'reference']
-    return analyze(frames, refs)
+    frames, refs = split_records(read_records(raw))
+    return analyze(frames, refs, baseline=baseline)
 
 
 def main():

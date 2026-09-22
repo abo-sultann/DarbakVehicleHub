@@ -138,6 +138,44 @@ class CalibrationTest(unittest.TestCase):
             self.assertEqual(source.read_bytes(), original)
             self.assertNotEqual(subprocess.run(cmd, capture_output=True).returncode, 0)
 
+    def test_resume_combines_points_but_never_associates_across_session_clocks(self):
+        baseline = []
+        for i, (p, t) in enumerate([(92, 20), (180, 30)]):
+            f, r = self.frame(1000+i*30, p, t), self.ref(1001+i*30, (p-92)/7, t)
+            f['decoded']['type'], r['event'] = 'tpms_frame', 'reference'
+            f['host_monotonic_s'], r['host_monotonic_s'] = 1000+i*30, 1001+i*30
+            baseline.extend([f, r])
+        frames, refs = [], []
+        for i, (p, t) in enumerate([(260, 25), (339, 35)]):
+            f, r = self.frame(2000+i*30, p, t), self.ref(2001+i*30, (p-92)/7, t)
+            f['host_monotonic_s'], r['host_monotonic_s'] = i*30, i*30+1
+            frames.append(f)
+            refs.append(r)
+        report = analyze(frames, refs, baseline=baseline)
+        group = next(iter(report['sensors'].values()))
+        self.assertEqual([r['reference_index'] for r in report['links']], [1, 2, 3, 4])
+        self.assertEqual([r['session'] for r in report['links']], ['baseline']*2+['current']*2)
+        self.assertEqual(group['pressure']['independent_observations'], 4)
+        self.assertTrue(any(c['width'] == 9 and c['byte_start'] == 5 and abs(c['scale']-1/7)<1e-9
+                            for c in group['pressure']['candidates']))
+        self.assertFalse(report['mapping_verified'])
+        # A resumed session with no new RF cannot recycle the last baseline frame.
+        silent = analyze([], refs[:1], baseline=baseline)
+        self.assertEqual(silent['links'][-1]['status'], 'unmatched')
+        self.assertIsNone(silent['links'][-1]['nearest_frame'])
+
+    def test_resumed_live_zip_contains_baseline_and_reanalyses_it_automatically(self):
+        fixture = Path(__file__).parent / 'fixtures/TPMS_LIVE_20260922.jsonl'
+        with tempfile.TemporaryDirectory() as temp, patch.object(tool.serial, 'Serial', return_value=FakeSerial()), patch.object(tool, 'choose_port', return_value='TEST'), patch('builtins.input', side_effect=['30 34', 'q']), patch.object(sys, 'argv', ['capture', '--live-calibration', '--baseline', str(fixture), '--out', str(Path(temp)/'resume')]):
+            self.assertEqual(tool.main(), 0)
+            with zipfile.ZipFile(Path(temp)/'resume.zip') as z:
+                self.assertEqual(z.read('baseline.jsonl'), fixture.read_bytes())
+                saved = json.loads(z.read('calibration.json'))
+                self.assertEqual(saved['baseline_references'], 5)
+                self.assertEqual(saved['current_references'], 1)
+                self.assertEqual(saved['links'][-1]['status'], 'unmatched')
+            self.assertEqual(analyze_session(Path(temp)/'resume.zip'), saved)
+
     def test_models_use_all_points_and_never_self_approve(self):
         raw = [92, 180, 260, 339, 300]
         temps = [20, 30, 25, 35, 22]

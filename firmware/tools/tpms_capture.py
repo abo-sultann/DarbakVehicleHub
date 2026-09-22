@@ -12,7 +12,7 @@ import time
 import zipfile
 
 import serial
-from tpms_calibration import analyze, feedback
+from tpms_calibration import analyze, feedback, read_records, split_records
 from serial.tools import list_ports
 
 USB_UART_VIDS = {0x10C4, 0x1A86, 0x0403, 0x303A}
@@ -231,9 +231,11 @@ def archive(folder, capture, metadata, references):
     }
     (folder / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     if metadata.get("live_calibration"):
-        report = analyze(frames, references)
+        baseline_path = folder / "baseline.jsonl"
+        baseline = read_records(baseline_path.read_text(encoding="utf-8-sig")) if baseline_path.exists() else []
+        report = analyze(frames, references, baseline=baseline)
         (folder / "calibration.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
-        print(f"Calibration: {len(references)} references; "
+        print(f"Calibration: {len(references)} new references, {report['baseline_references']} previous references; "
               f"{sum(x['status'] == 'linked' for x in report['links'])} unambiguous links. "
               "See calibration.json; firmware mapping remains unverified.")
         print(feedback(report))
@@ -256,10 +258,16 @@ def main():
     ap.add_argument("--with-reference", action="store_true",
                     help="Optional: request readings only when a real reference instrument exists")
     ap.add_argument("--flash", action="store_true")
+    ap.add_argument("--baseline", type=Path,
+                    help="Previous evidence JSONL to continue live calibration; retained in the session ZIP")
     ap.add_argument("--label", default="one_sensor")
     ap.add_argument("--seconds", type=float, default=180)
     ap.add_argument("--out", type=Path, help="Output session directory")
     a = ap.parse_args()
+    if a.baseline and not a.live_calibration:
+        ap.error("--baseline requires --live-calibration")
+    baseline_bytes = a.baseline.read_bytes() if a.baseline else None
+    baseline = read_records(baseline_bytes.decode('utf-8-sig')) if baseline_bytes else []
     root = Path(__file__).resolve().parent
     port = choose_port(a.port)
     metadata = {"port": port, "baud": a.baud, "label": a.label, "python": sys.version, "live_calibration": a.live_calibration}
@@ -267,6 +275,9 @@ def main():
         metadata["firmware"] = ensure_firmware(port, a.baud, root)
     folder = a.out or Path.cwd() / time.strftime("TPMS_ONE_TEST_%Y%m%d_%H%M%S")
     folder.mkdir(parents=True, exist_ok=False)
+    if baseline_bytes:
+        (folder / "baseline.jsonl").write_bytes(baseline_bytes)
+        metadata['baseline_sha256'] = hashlib.sha256(baseline_bytes).hexdigest()
     references, capture = [], None
     try:
         capture = Capture(port, a.baud, folder)
@@ -276,6 +287,11 @@ def main():
                   "Enter PSI Celsius only after a confirmed fresh display update.\n"
                   "Example: 35.2 28   |   q then Enter (or Ctrl+C) saves and finishes.\n"
                   "RF capture continues while you type. No time limit.")
+            if baseline:
+                previous_frames, previous_refs = split_records(baseline)
+                print(f"Continuing saved evidence: {len(previous_frames)} RF records, {len(previous_refs)} references. "
+                      "Only new RF received in this session can match new entries.")
+                print(feedback(analyze([], [], baseline=baseline), show_last_reference=False))
             while True:
                 entry = input("Fresh PSI Celsius > ").strip()
                 if capture.error:
@@ -293,8 +309,8 @@ def main():
                 references.append(capture.event("reference", **ref, source="original_tpms_display", freshness_basis="user_confirmed_update"))
                 with capture.lock:
                     frames = list(capture.frames)
-                report = analyze(frames, references)
-                capture.event("calibration_feedback", reference_index=len(references),
+                report = analyze(frames, references, baseline=baseline)
+                capture.event("calibration_feedback", reference_index=report['links'][-1]['reference_index'],
                               association_status=report["links"][-1]["status"],
                               duplicate_of=report["links"][-1].get("duplicate_of"))
                 print(feedback(report))

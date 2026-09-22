@@ -22,6 +22,7 @@ files = {
     root / "docs/TPMS_DECODER.md": "TPMS_DECODER.md",
     root / "docs/TPMS_FIELD_20260922.md": "TPMS_FIELD_20260922.md",
     root / "docs/TPMS_LIVE_20260922.md": "TPMS_LIVE_20260922.md",
+    root / "firmware/tests/fixtures/TPMS_LIVE_20260922.jsonl": "calibration-baseline.jsonl",
 }
 for source, name in files.items():
     shutil.copyfile(source, out / name)
