@@ -16,6 +16,7 @@ files = {
     build / "bootloader.bin": "bootloader.bin",
     build / "partitions.bin": "partitions.bin",
     root / "firmware/tools/tpms_capture.py": "tpms_capture.py",
+    root / "firmware/tools/tpms_calibration.py": "tpms_calibration.py",
     root / "firmware/tools/Test-TPMS.ps1": "Test-TPMS.ps1",
     root / "docs/TPMS_FIELD_TEST.md": "READ_ME.md",
     root / "docs/TPMS_DECODER.md": "TPMS_DECODER.md",

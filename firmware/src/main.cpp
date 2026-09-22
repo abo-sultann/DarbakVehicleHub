@@ -63,7 +63,6 @@ bool nextEdge(Edge &out) {
 
 void emitFrame(const tpms::Frame &frame) {
   const uint16_t count = repeats.observe(frame, millis());
-  if (count > 2) return;
   char payload[21];
   for (unsigned i = 0; i < 10; ++i) snprintf(payload + 2*i, 3, "%02X", frame.bytes[i]);
   Serial.printf("{\"v\":3,\"type\":\"tpms_frame\",\"seq\":%lu,\"rx_ms\":%lu,"

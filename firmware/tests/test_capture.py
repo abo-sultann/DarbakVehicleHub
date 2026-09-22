@@ -9,6 +9,9 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
+import sys
+sys.path.insert(0, str(Path(__file__).parents[1] / "tools"))
+from tpms_calibration import analyze, associate
 
 spec = importlib.util.spec_from_file_location("capture", Path(__file__).parents[1] / "tools/tpms_capture.py")
 tool = importlib.util.module_from_spec(spec)
@@ -22,6 +25,50 @@ class FakeSerial:
     def readline(self):
         try: return self.q.get(timeout=0.02)
         except queue.Empty: return b""
+
+class CalibrationTest(unittest.TestCase):
+    def frame(self, t, p=92, temp=25, sensor=0x82):
+        b = [0x15, 0xb9, 0xc5, sensor, 1, p >> 8, p & 255, temp, 27]
+        b.append(sum(b) % 256)
+        return {"host_unix_s": t, "decoded": {"payload_hex": bytes(b).hex(), "repeat_confirmed": True}}
+
+    def ref(self, t, p=0, temp=25):
+        return dict(host_unix_s=t, pressure_psi=p, temperature_c=temp, fresh=True)
+
+    def test_association_rejects_stale_mixed_and_transitions(self):
+        r = self.ref(100)
+        self.assertEqual(associate([self.frame(99)], [r])[0]['status'], 'linked')
+        self.assertEqual(associate([self.frame(80)], [r])[0]['status'], 'unmatched')
+        self.assertEqual(associate([self.frame(99), self.frame(101, sensor=0x83)], [r])[0]['status'], 'ambiguous_sensor')
+        self.assertEqual(associate([self.frame(99), self.frame(101, p=200)], [r])[0]['status'], 'ambiguous_payload')
+        r['fresh'] = False
+        self.assertEqual(associate([self.frame(99)], [r])[0]['status'], 'not_fresh')
+
+    def test_models_use_all_points_and_never_self_approve(self):
+        raw = [92, 180, 260, 339, 300]
+        temps = [20, 30, 25, 35, 22]
+        frames = [self.frame(i*30, p, t) for i, (p, t) in enumerate(zip(raw, temps))]
+        refs = [self.ref(i*30+1, (p-92)/7, t) for i, (p, t) in enumerate(zip(raw, temps))]
+        report = analyze(frames, refs)
+        group = next(iter(report['sensors'].values()))
+        matches = group['pressure']['candidates']
+        self.assertTrue(any(c['byte_start'] == 5 and c['byte_order'] == 'big' and abs(c['scale']-1/7)<1e-9 for c in matches))
+        self.assertFalse(report['mapping_verified'])
+        self.assertFalse(group['sensor_id_verified'])
+        self.assertTrue(all(len(c['residuals']) == 5 for c in matches))
+        refs[-1]['pressure_psi'] += 10
+        bad = next(iter(analyze(frames, refs)['sensors'].values()))
+        self.assertFalse(any(c['byte_start'] == 5 and c['width'] == 16 and c['byte_order'] == 'big' for c in bad['pressure']['candidates']))
+
+    def test_live_session_multiple_inputs_and_zip(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(tool.serial, 'Serial', return_value=FakeSerial()), patch.object(tool, 'choose_port', return_value='TEST'), patch('builtins.input', side_effect=['bad', '-', '32 25', '34 27', 'q']), patch.object(sys, 'argv', ['capture', '--live-calibration', '--out', str(Path(temp)/'live')]):
+            self.assertEqual(tool.main(), 0)
+            with zipfile.ZipFile(Path(temp)/'live.zip') as z:
+                report = json.loads(z.read('calibration.json'))
+                self.assertEqual(len(report['links']), 2)
+                self.assertEqual(report['links'][0]['status'], 'unmatched')
+                self.assertIn('serial.bin', z.namelist())
+                self.assertIn('host_monotonic_s', report['links'][0]['reference'])
 
 class CaptureTest(unittest.TestCase):
     def test_mixed_sensors_are_not_combined_for_field_comparison(self):
@@ -61,7 +108,10 @@ class CaptureTest(unittest.TestCase):
             folder.mkdir()
             capture = tool.Capture("TEST", 115200, folder)
             start = capture.begin("mounted")["host_unix_s"]
-            for line in raw: fake.q.put(line)
+            for line in raw:
+                midpoint = len(line)//2
+                fake.q.put(line[:midpoint])
+                fake.q.put(line[midpoint:])
             deadline = time.monotonic() + 2
             while len(capture.records) < len(raw) + 1 and time.monotonic() < deadline:
                 time.sleep(0.02)

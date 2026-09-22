@@ -12,6 +12,7 @@ import time
 import zipfile
 
 import serial
+from tpms_calibration import analyze
 from serial.tools import list_ports
 
 USB_UART_VIDS = {0x10C4, 0x1A86, 0x0403, 0x303A}
@@ -86,6 +87,28 @@ def flash(port, root):
     return manifest
 
 
+def ensure_firmware(port, baud, root):
+    manifest = verify_package(root)
+    # Status identifies the actual running image, not a remembered host file.
+    probe = serial.Serial()
+    probe.port, probe.baudrate, probe.timeout = port, baud, 0.2
+    probe.dtr, probe.rts = False, False
+    try:
+        probe.open()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                status = json.loads(probe.readline())
+            except (ValueError, UnicodeError):
+                continue
+            if isinstance(status, dict) and status.get("type") == "status" and status.get("build") == manifest["commit"][:12]:
+                print("Current packaged firmware is already installed; skipping flash.")
+                return {**manifest, "flash_skipped": True}
+    finally:
+        probe.close()
+    return flash(port, root)
+
+
 class Capture:
     def __init__(self, port, baud, folder):
         self.folder = folder
@@ -111,7 +134,7 @@ class Capture:
 
     def event(self, kind, **fields):
         with self.lock:
-            obj = {"host_unix_s": time.time(), "stage": self.stage, "event": kind, **fields}
+            obj = {"host_unix_s": time.time(), "host_monotonic_s": time.monotonic(), "stage": self.stage, "event": kind, **fields}
             self.stream.write(json.dumps(obj, ensure_ascii=False) + "\n")
             self.stream.flush()
             self.records.append(obj)
@@ -123,6 +146,7 @@ class Capture:
         return self.event("stage_start")
 
     def _read(self):
+        pending = b""
         try:
             while not self.stop.is_set():
                 raw = self.serial.readline()
@@ -130,20 +154,23 @@ class Capture:
                     continue
                 self.binary.write(raw)
                 self.binary.flush()
-                line = raw.decode("utf-8", "replace").rstrip("\r\n")
-                try:
-                    decoded = json.loads(line)
-                    if not isinstance(decoded, dict):
+                pending += raw
+                while b"\n" in pending:
+                    complete, pending = pending.split(b"\n", 1)
+                    line = complete.decode("utf-8", "replace").rstrip("\r\n")
+                    try:
+                        decoded = json.loads(line)
+                        if not isinstance(decoded, dict):
+                            decoded = None
+                    except json.JSONDecodeError:
                         decoded = None
-                except json.JSONDecodeError:
-                    decoded = None
-                record = self.event("serial", line=line, decoded=decoded)
-                if decoded and decoded.get("type") == "tpms_frame":
-                    with self.lock:
-                        self.frames.append(record)
-                    print("\nRF " + str(decoded.get("payload_hex")) +
-                          "  SUM8=" + str(decoded.get("integrity") == "SUM8") +
-                          "  repeats=" + str(decoded.get("repeats")), flush=True)
+                    record = self.event("serial", line=line, decoded=decoded)
+                    if decoded and decoded.get("type") == "tpms_frame":
+                        with self.lock:
+                            self.frames.append(record)
+                        print("\n" + time.strftime("%H:%M:%S") + " RF " + str(decoded.get("payload_hex")) +
+                              "  SUM8=" + str(decoded.get("integrity") == "SUM8") +
+                              "  repeats=" + str(decoded.get("repeats")), flush=True)
         except Exception as exc:
             self.error = str(exc)
 
@@ -203,6 +230,12 @@ def archive(folder, capture, metadata, references):
         },
     }
     (folder / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    if metadata.get("live_calibration"):
+        report = analyze(frames, references)
+        (folder / "calibration.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print(f"Calibration: {len(references)} references; "
+              f"{sum(x['status'] == 'linked' for x in report['links'])} unambiguous links. "
+              "See calibration.json; firmware mapping remains unverified.")
     target = folder.with_suffix(".zip")
     with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
         for p in sorted(folder.iterdir()):
@@ -216,7 +249,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port")
     ap.add_argument("--baud", type=int, default=115200)
-    ap.add_argument("--guided", action="store_true")
+    modes = ap.add_mutually_exclusive_group()
+    modes.add_argument("--guided", action="store_true")
+    modes.add_argument("--live-calibration", action="store_true")
     ap.add_argument("--with-reference", action="store_true",
                     help="Optional: request readings only when a real reference instrument exists")
     ap.add_argument("--flash", action="store_true")
@@ -226,15 +261,37 @@ def main():
     a = ap.parse_args()
     root = Path(__file__).resolve().parent
     port = choose_port(a.port)
-    metadata = {"port": port, "baud": a.baud, "label": a.label, "python": sys.version}
+    metadata = {"port": port, "baud": a.baud, "label": a.label, "python": sys.version, "live_calibration": a.live_calibration}
     if a.flash:
-        metadata["firmware"] = flash(port, root)
+        metadata["firmware"] = ensure_firmware(port, a.baud, root)
     folder = a.out or Path.cwd() / time.strftime("TPMS_ONE_TEST_%Y%m%d_%H%M%S")
     folder.mkdir(parents=True, exist_ok=False)
     references, capture = [], None
     try:
         capture = Capture(port, a.baud, folder)
-        if a.guided:
+        if a.live_calibration:
+            capture.begin("live_calibration")
+            print("LIVE CALIBRATION: only the test sensor should be powered.\n"
+                  "Enter PSI Celsius only after a confirmed fresh display update.\n"
+                  "Example: 35.2 28   |   q then Enter (or Ctrl+C) saves and finishes.\n"
+                  "RF capture continues while you type. No time limit.")
+            while True:
+                entry = input("Fresh PSI Celsius > ").strip()
+                if capture.error:
+                    raise RuntimeError(capture.error)
+                if entry.lower() in {"q", "quit", "exit"}:
+                    break
+                try:
+                    ref = read_reference(entry)
+                    if not ref["fresh"]:
+                        print("No reference saved. Enter two fresh measurements or q.")
+                        continue
+                except ValueError as exc:
+                    print(exc)
+                    continue
+                references.append(capture.event("reference", **ref, source="original_tpms_display", freshness_basis="user_confirmed_update"))
+                print(f"Saved reference #{len(references)}; recording continues.")
+        elif a.guided:
             print("\nONE session, three states of the SAME sensor. "
                   "Other fitted sensors may remain in place.\n"
                   "Capture runs during every prompt. No receiver display is assumed.")
@@ -266,7 +323,7 @@ def main():
                 if capture.error:
                     raise RuntimeError(capture.error)
                 time.sleep(0.2)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         metadata["interrupted"] = True
     except Exception as exc:
         metadata["error"] = str(exc)
