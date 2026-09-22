@@ -1,6 +1,9 @@
 param(
     [string]$Port = "",
-    [switch]$SkipFlash
+    [switch]$SkipFlash,
+    [switch]$Guided,
+    [ValidateRange(1, 3600)]
+    [int]$Seconds = 180
 )
 $ErrorActionPreference = "Stop"
 $venv = Join-Path $env:LOCALAPPDATA "DarbakTPMS\venv"
@@ -17,7 +20,8 @@ if (-not (Test-Path $python)) {
 }
 & $python -m pip install --quiet --disable-pip-version-check "pyserial==3.5" "esptool==4.8.1"
 if ($LASTEXITCODE -ne 0) { throw "Could not install the serial/flashing dependencies." }
-$captureArgs = @((Join-Path $PSScriptRoot "tpms_capture.py"), "--guided")
+$captureArgs = @((Join-Path $PSScriptRoot "tpms_capture.py"), "--seconds", "$Seconds", "--label", "passive_mixed_sensors")
+if ($Guided) { $captureArgs += "--guided" }
 if (-not $SkipFlash) { $captureArgs += "--flash" }
 if ($Port) { $captureArgs += @("--port", $Port) }
 & $python @captureArgs

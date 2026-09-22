@@ -258,6 +258,9 @@ def main():
             print("\nRefit the sensor normally after the session. No tire deflation is needed.")
         else:
             capture.begin(a.label)
+            print(f"\nListening for {a.seconds:g} seconds. Leave fitted sensors in place.\n"
+                  "No reference display or tire manipulation is required.\n"
+                  "Raw fields are not verified PSI/Celsius. Ctrl+C saves the session early.")
             end = time.monotonic() + a.seconds
             while time.monotonic() < end:
                 if capture.error:
