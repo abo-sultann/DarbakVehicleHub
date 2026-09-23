@@ -65,3 +65,30 @@ No fully matching specification was found in these sources. Direct Celsius
 from byte 7 fits the two delayed candidates but is still a hypothesis.
 The firmware keeps physical units and final sensor ID null; no arbitrary
 pressure line, assumed ambient offset or matching-prefix ID is promoted.
+
+### Product-photo and additional protocol checks
+
+The saved seller screenshots show a generic solar receiver and external valve
+caps, without a readable manufacturer/model or sensor-chip marking. Their
+advertised accuracy/range is not a protocol specification and does not justify
+loosening the reference-fit tolerance. No new hardware session was requested.
+
+- [Totem's published protocol](https://totemtek.com/products/tires-management/tpms/tpms-sensors-for-gps-tracker-tpms-mdvr-and-dashcam/)
+  describes a 14-byte receiver interface with a 10-byte inner record. Its
+  misleadingly named `crc_checksum` uses XOR, not addition; pressure occupies
+  record bytes 4–5 and is shifted right four bits before subtracting 100 kPa.
+  This is not a matching RF specification for the Darbak SUM8 frames. Do not
+  transfer its conversion or ID layout merely because its inner length matches.
+- [Milek7's receiver investigation](https://milek7.pl/tpmsreceiver/)
+  covers Opel/Schrader EG53MA4: 125 us symbols, three leading non-ID bytes,
+  then four ID bytes and one-byte pressure/temperature. That field order and
+  timing differ from the observed Darbak candidates; the article itself leaves
+  temperature conversion unresolved. Its pressure suggestion is not evidence
+  for this sensor.
+- [Comments on the 15B9 investigation](https://habr.com/ru/articles/516460/comments/)
+  add an absolute-pressure explanation, but no matching SUM8 variant. An
+  absolute-pressure hypothesis alone cannot establish the receiver's offset.
+
+These checks do not resolve physical units or true ID boundaries. The last
+firmware change remains the tested timing/preamble recovery; no speculative
+conversion has been enabled.
