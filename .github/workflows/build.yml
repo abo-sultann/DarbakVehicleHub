@@ -25,8 +25,6 @@ jobs:
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          base: ${{ github.event.before }}
-          ref: ${{ github.sha }}
           filters: |
             android:
               - 'android/**'
@@ -61,13 +59,47 @@ jobs:
     needs: changes
     if: needs.changes.outputs.firmware == 'true'
     runs-on: ubuntu-latest
+    env:
+      TPMS_BUILD_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Install PlatformIO
-        run: pip install platformio
+        run: pip install platformio==6.1.19 pyserial==3.5
+      - name: Replay real TPMS captures and test serial collection
+        run: python firmware/tests/run_replay.py
+      - name: Test OBD TPMS transport and evidence
+        run: python firmware/tests/test_obd.py
+      - name: Validate PowerShell entrypoint syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          foreach ($entry in @("Test-TPMS.ps1", "Test-OBD-TPMS.ps1")) {
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              "$env:GITHUB_WORKSPACE/firmware/tools/$entry",
+              [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | Format-List
+              exit 1
+            }
+          }
       - name: Build ESP32 firmware
         working-directory: firmware
-        run: pio run
+        run: pio run -e esp32dev -e esp32_obd_tpms
+      - name: Package ESP32 firmware
+        run: python firmware/tools/package_firmware.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DarbakVehicleHub-ESP32-TPMS
+          path: dist/*
+          retention-days: 14
+      - name: Package OBD TPMS test
+        run: python firmware/tools/package_obd.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DarbakVehicleHub-ESP32-OBD-TPMS
+          path: dist-obd/*
+          retention-days: 14

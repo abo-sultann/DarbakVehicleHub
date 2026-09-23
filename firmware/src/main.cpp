@@ -1,184 +1,182 @@
 #include <Arduino.h>
-#include <driver/twai.h>
-#include <SPIFFS.h>
+#include <SPI.h>
+#include <ELECHOUSE_CC1101_SRC_DRV.h>
 #include "HubConfig.h"
+#include "TpmsDecoder.h"
+
+#ifndef TPMS_BUILD_SHA
+#define TPMS_BUILD_SHA "local"
+#endif
 
 namespace {
+constexpr size_t EDGE_CAPACITY = 4096;
+constexpr uint32_t IDLE_US = 6000;
+struct Edge { uint32_t us; uint8_t after; };
+volatile Edge edges[EDGE_CAPACITY];
+volatile size_t edgeRead = 0, edgeWrite = 0;
+volatile uint32_t droppedEdges = 0, lastEdgeUs = 0;
+portMUX_TYPE edgeMux = portMUX_INITIALIZER_UNLOCKED;
+tpms::Decoder decoder;
+tpms::Repeats repeats;
+bool havePrevious = false;
+Edge previous = {};
+uint32_t handledDrops = 0, lastStatusMs = 0, frameSequence = 0;
+uint32_t rawSequence = 0, lastRawMs = 0;
+uint16_t rawDuration[200];
+bool rawAfter[200];
+size_t rawCount = 0;
+bool rawOverflow = false;
 
-constexpr char CAPTURE_FILE[] = "/can_capture.txt";
-constexpr size_t MAX_CAPTURE_BYTES = 384 * 1024;
-constexpr uint32_t FLUSH_INTERVAL_MS = 1000;
+void IRAM_ATTR onGdo0Edge() {
+  const uint32_t now = micros();
+  const uint8_t level = digitalRead(PIN_CC1101_GDO0);
+  portENTER_CRITICAL_ISR(&edgeMux);
+  lastEdgeUs = now;  // Update even on overflow.
+  const size_t next = (edgeWrite + 1) % EDGE_CAPACITY;
+  if (next != edgeRead) {
+    edges[edgeWrite].us = now;
+    edges[edgeWrite].after = level;
+    edgeWrite = next;
+  } else { ++droppedEdges; }
+  portEXIT_CRITICAL_ISR(&edgeMux);
+}
 
-bool canStarted = false;
-bool captureEnabled = false;
-File captureFile;
-size_t captureBytes = 0;
-uint32_t lastStatusMs = 0;
-uint32_t lastFlushMs = 0;
-uint32_t capturedFrames = 0;
-uint32_t droppedFrames = 0;
+bool nextEdge(Edge &out) {
+  portENTER_CRITICAL(&edgeMux);
+  if (handledDrops != droppedEdges) {
+    handledDrops = droppedEdges;
+    edgeRead = edgeWrite;
+    havePrevious = false;
+    decoder.reset();
+    rawCount = 0;
+    rawOverflow = false;
+  }
+  const bool available = edgeRead != edgeWrite;
+  if (available) {
+    out.us = edges[edgeRead].us;
+    out.after = edges[edgeRead].after;
+    edgeRead = (edgeRead + 1) % EDGE_CAPACITY;
+  }
+  portEXIT_CRITICAL(&edgeMux);
+  return available;
+}
+
+void emitFrame(const tpms::Frame &frame) {
+  const uint16_t count = repeats.observe(frame, millis());
+  char payload[21];
+  for (unsigned i = 0; i < 10; ++i) snprintf(payload + 2*i, 3, "%02X", frame.bytes[i]);
+  Serial.printf("{\"v\":3,\"type\":\"tpms_frame\",\"seq\":%lu,\"rx_ms\":%lu,"
+                "\"protocol\":\"darbak_capture_80_lsb\",\"payload_hex\":\"%s\","
+                "\"integrity\":\"SUM8\",\"repeats\":%u,\"repeat_confirmed\":%s,"
+                "\"id_candidate\":\"%02X%02X%02X%02X\",\"id_candidate_range\":\"bytes_0_3\","
+                "\"sensor_id\":null,\"pressure_psi\":null,\"temperature_c\":null,"
+                "\"preamble_bits\":%u,\"gap_tail\":%s,\"raw_b5_b6\":%u,\"raw_b7\":%u,"
+                "\"adaptive_timing\":%s,\"short_low_us\":%u,\"short_high_us\":%u,"
+                "\"mapping_verified\":false}\n",
+    (unsigned long)++frameSequence, (unsigned long)millis(), payload,
+    count, count >= 2 ? "true" : "false",
+    frame.bytes[0], frame.bytes[1], frame.bytes[2], frame.bytes[3],
+    frame.preambleBits, frame.gapTail ? "true" : "false",
+    (unsigned(frame.bytes[5]) << 8) | frame.bytes[6], unsigned(frame.bytes[7]),
+    frame.adaptiveTiming ? "true" : "false", frame.shortLowUs, frame.shortHighUs);
+}
+
+void finishRaw(bool valid) {
+  // Preserve the previous capture format: H/L label the level AFTER the edge.
+  // Rate-limit full pulse dumps so Serial never permanently starves reception.
+  const uint32_t now = millis();
+  if (!rawOverflow && rawCount >= 100 && rawCount <= 192 &&
+      (rawSequence == 0 || now - lastRawMs >= 1000)) {
+    lastRawMs = now;
+    Serial.printf("TPMS_CANDIDATE seq=%lu scope=packet decoded=%u levels=after_edge pulses=",
+                  (unsigned long)++rawSequence, valid ? 1 : 0);
+    for (size_t i = 0; i < rawCount; ++i)
+      Serial.printf("%s%u%c", i ? "," : "", rawDuration[i], rawAfter[i] ? 'H' : 'L');
+    Serial.println();
+  }
+  rawCount = 0;
+  rawOverflow = false;
+}
+
+void processEdge(const Edge &edge) {
+  if (havePrevious) {
+    const uint32_t duration = edge.us - previous.us;
+    tpms::Frame frame;
+    // The previous edge defines the level actually held over this interval.
+    const bool valid = decoder.pulse(duration, previous.after != 0, frame);
+    if (duration >= 650) {
+      if (valid) emitFrame(frame);
+      finishRaw(valid);
+    } else if (rawCount < 200) {
+      rawDuration[rawCount] = duration;
+      rawAfter[rawCount++] = edge.after != 0;
+    } else { rawOverflow = true; }
+    if (edge.after == previous.after) {
+      // A missed edge must never be repaired by inventing a half-bit.
+      decoder.reset();
+      rawOverflow = true;
+    }
+  }
+  previous = edge;
+  havePrevious = true;
+}
 
 void printStatus() {
-  Serial.printf(
-      "{\"v\":1,\"type\":\"status\",\"can\":\"%s\",\"capture\":%s,"
-      "\"frames\":%lu,\"dropped\":%lu,\"bytes\":%u}\n",
-      canStarted ? "listen_only" : "unavailable",
-      captureEnabled ? "true" : "false",
-      static_cast<unsigned long>(capturedFrames),
-      static_cast<unsigned long>(droppedFrames),
-      static_cast<unsigned>(captureBytes));
+  const auto &c = decoder.counters;
+  Serial.printf("{\"v\":3,\"type\":\"status\",\"mode\":\"tpms_frame_decoder\","
+                "\"build\":\"%s\",\"rf_mhz\":433.92,\"valid_frames\":%lu,"
+                "\"dropped_edges\":%lu,\"reject_timing\":%lu,\"reject_length\":%lu,"
+                "\"timing_recovered\":%lu,"
+                "\"reject_manchester\":%lu,\"reject_preamble\":%lu,\"reject_checksum\":%lu}\n",
+    TPMS_BUILD_SHA, (unsigned long)c.valid, (unsigned long)handledDrops,
+    (unsigned long)c.timing, (unsigned long)c.length,
+    (unsigned long)c.timingRecovered,
+    (unsigned long)c.manchester, (unsigned long)c.preamble, (unsigned long)c.checksum);
 }
 
-bool startCanListenOnly() {
-  twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(
-      static_cast<gpio_num_t>(PIN_CAN_TX),
-      static_cast<gpio_num_t>(PIN_CAN_RX),
-      TWAI_MODE_LISTEN_ONLY);
-  twai_timing_config_t t = TWAI_TIMING_CONFIG_500KBITS();
-  twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-  if (twai_driver_install(&g, &t, &f) != ESP_OK) return false;
-  if (twai_start() != ESP_OK) {
-    twai_driver_uninstall();
-    return false;
-  }
-  return true;
+void initRadio() {
+  // Preserve the proven receive profile. No RSSI acceptance/rejection gate.
+  SPI.begin(PIN_CC1101_SCK, PIN_CC1101_MISO, PIN_CC1101_MOSI, PIN_CC1101_CSN);
+  ELECHOUSE_cc1101.setSpiPin(PIN_CC1101_SCK, PIN_CC1101_MISO, PIN_CC1101_MOSI, PIN_CC1101_CSN);
+  ELECHOUSE_cc1101.Init();
+  ELECHOUSE_cc1101.setGDO0(PIN_CC1101_GDO0);
+  ELECHOUSE_cc1101.setMHZ(TPMS_CENTER_MHZ);
+  ELECHOUSE_cc1101.setModulation(2);
+  ELECHOUSE_cc1101.setRxBW(325.0);
+  ELECHOUSE_cc1101.setSyncMode(0);
+  ELECHOUSE_cc1101.setPktFormat(3);
+  ELECHOUSE_cc1101.SetRx();
+  pinMode(PIN_CC1101_GDO0, INPUT);
+  attachInterrupt(digitalPinToInterrupt(PIN_CC1101_GDO0), onGdo0Edge, CHANGE);
 }
-
-String frameJson(const twai_message_t& m) {
-  char head[96];
-  snprintf(head, sizeof(head),
-           "{\"v\":1,\"type\":\"can_raw\",\"ms\":%lu,\"id\":%lu,\"ext\":%s,\"dlc\":%u,\"data\":\"",
-           static_cast<unsigned long>(millis()),
-           static_cast<unsigned long>(m.identifier),
-           m.extd ? "true" : "false",
-           m.data_length_code);
-  String line(head);
-  line.reserve(120);
-  static const char HEX_DIGITS[] = "0123456789ABCDEF";
-  for (uint8_t i = 0; i < m.data_length_code; ++i) {
-    line += HEX_DIGITS[(m.data[i] >> 4) & 0x0F];
-    line += HEX_DIGITS[m.data[i] & 0x0F];
-  }
-  line += "\"}";
-  return line;
-}
-
-void storeFrame(const twai_message_t& m) {
-  const String line = frameJson(m);
-  Serial.println(line);
-  if (!captureEnabled || !captureFile) return;
-
-  const size_t needed = line.length() + 1;
-  if (captureBytes + needed > MAX_CAPTURE_BYTES) {
-    captureEnabled = false;
-    captureFile.flush();
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"full\"}");
-    return;
-  }
-
-  const size_t written = captureFile.println(line);
-  if (written > 0) {
-    captureBytes += written;
-    ++capturedFrames;
-  } else {
-    ++droppedFrames;
-  }
-}
-
-bool initCapture() {
-  if (!SPIFFS.begin(false)) {
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"spiffs_mount_failed_formatting\"}");
-    if (!SPIFFS.format() || !SPIFFS.begin(false)) {
-      Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"spiffs_unavailable\"}");
-      return false;
-    }
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"spiffs_formatted\"}");
-  }
-
-  // Each power-up is a fresh field-test session. This prevents old CAN data\n  // from being mixed with the next vehicle capture.\n  if (SPIFFS.exists(CAPTURE_FILE)) SPIFFS.remove(CAPTURE_FILE);\n  captureBytes = 0;\n\n  captureFile = SPIFFS.open(CAPTURE_FILE, FILE_WRITE);
-  if (!captureFile) {
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"open_failed\"}");
-    return false;
-  }
-  return true;
-}
-
-void dumpCapture() {
-  if (captureFile) captureFile.flush();
-  File f = SPIFFS.open(CAPTURE_FILE, FILE_READ);
-  if (!f) {
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"missing\"}");
-    return;
-  }
-  Serial.printf("{\"v\":1,\"type\":\"capture_dump\",\"bytes\":%u}\n",
-                static_cast<unsigned>(f.size()));
-  uint8_t buf[128];
-  while (f.available()) {
-    const size_t n = f.read(buf, sizeof(buf));
-    Serial.write(buf, n);
-    delay(1);
-  }
-  Serial.println();
-  f.close();
-  Serial.println("{\"v\":1,\"type\":\"capture_dump\",\"state\":\"done\"}");
-}
-
-void eraseCapture() {
-  captureEnabled = false;
-  if (captureFile) captureFile.close();
-  SPIFFS.remove(CAPTURE_FILE);
-  captureBytes = 0;
-  capturedFrames = 0;
-  droppedFrames = 0;
-  captureFile = SPIFFS.open(CAPTURE_FILE, FILE_WRITE);
-  captureEnabled = static_cast<bool>(captureFile);
-  Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"erased\"}");
-}
-
-void handleSerialCommand() {
-  if (!Serial.available()) return;
-  String cmd = Serial.readStringUntil('\n');
-  cmd.trim();
-  cmd.toUpperCase();
-  if (cmd == "DUMP") dumpCapture();
-  else if (cmd == "ERASE") eraseCapture();
-  else if (cmd == "STOP") {
-    captureEnabled = false;
-    if (captureFile) captureFile.flush();
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"stopped\"}");
-  } else if (cmd == "START") {
-    captureEnabled = static_cast<bool>(captureFile) && captureBytes < MAX_CAPTURE_BYTES;
-    Serial.println("{\"v\":1,\"type\":\"capture\",\"state\":\"started\"}");
-  } else if (cmd == "STATUS") printStatus();
-}
-
-} // namespace
+}  // namespace
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
   delay(500);
-  Serial.println("{\"v\":1,\"type\":\"boot\",\"stage\":\"start\"}");
-
-  captureEnabled = initCapture();
-  canStarted = startCanListenOnly();
+  Serial.println("{\"v\":3,\"type\":\"boot\",\"mode\":\"tpms_frame_decoder\","
+                 "\"mapping_verified\":false,\"rssi_filter\":false}");
+  initRadio();
   printStatus();
 }
 
 void loop() {
-  handleSerialCommand();
-
-  if (canStarted) {
-    twai_message_t msg{};
-    if (twai_receive(&msg, pdMS_TO_TICKS(5)) == ESP_OK) storeFrame(msg);
+  Edge edge;
+  for (size_t i = 0; i < EDGE_CAPACITY && nextEdge(edge); ++i) processEdge(edge);
+  portENTER_CRITICAL(&edgeMux);
+  const bool empty = edgeRead == edgeWrite;
+  const uint32_t last = lastEdgeUs;
+  portEXIT_CRITICAL(&edgeMux);
+  if (empty && havePrevious && (uint32_t)(micros() - last) > IDLE_US) {
+    tpms::Frame frame;
+    const bool valid = decoder.finishGap(previous.after != 0, frame);
+    if (valid) emitFrame(frame);
+    finishRaw(valid);
+    havePrevious = false;
   }
-
-  const uint32_t now = millis();
-  if (captureFile && now - lastFlushMs >= FLUSH_INTERVAL_MS) {
-    lastFlushMs = now;
-    captureFile.flush();
-  }
-  if (now - lastStatusMs >= 10000) {
-    lastStatusMs = now;
+  if (millis() - lastStatusMs >= 10000) {
+    lastStatusMs = millis();
     printStatus();
   }
+  delay(1);
 }
