@@ -1,128 +1,85 @@
 # Current TPMS decoder evidence
 
 Scope: the existing external 433.92 MHz valve sensor, ESP32 and CC1101 only.
-Receive proof is complete. The original ASK/OOK, 325 kHz RX bandwidth,
-asynchronous GDO0 profile and wiring are retained. RSSI is not an acceptance
-criterion, and is not sampled to reject a completed burst.
+RF reception and repeated digital bursts have already been proved. The known
+ASK/OOK, 325 kHz bandwidth and asynchronous GDO0 profile are unchanged. RSSI
+is not an acceptance criterion.
 
-## Field correction — 2026-09-22
+## Offline correction — 2026-09-23
 
-The owner has sensors only, **no original receiver display**, and three other
-sensors were already fitted during the field session. The field ZIP contained
-14 raw packet dumps but zero on-device decoded records. See
-[the field analysis](TPMS_FIELD_20260922.md).
+The production decoder now replays **36 recorded packets** across all five
+pulse fixtures: 10 from the original captures, 13/14 from the morning field
+session, and 13/13 from the live session (previously 4/13). The original pulse
+fixtures and live frame/reference fixture are unchanged. The morning packet
+containing a 25 us glitch remains rejected.
 
-The corrected decoder replays **12/14 field packets** and **10 old packets**.
-The previous fixed-length gate dropped the last Manchester half-bit when it
-merged into the following measured gap. The new code uses that observed gap
-level, supports 12–16 complete preamble bits, and accepts measured 50–155 us
-short runs. It does not guess the tail when no gap was observed.
-Malformed pairs, short glitches, bad checksums and ambiguous decoding still
-fail. No fixed sensor ID or 0x15 header whitelist is imposed.
+The live recording shows duty-cycle distortion: a nominal 100 us HIGH run
+can measure near 53 us while a nominal 100 us LOW run measures near 158 us.
+One shared 155 us threshold then misclassifies both levels. The correction
+estimates a separate short-run duration for each level from 20 preamble runs,
+before reading the payload or checksum. Their average must be 90–115 us.
+Double-run centers are one chip period beyond those short-run centers.
+Timing windows are disjoint; ambiguous widths are rejected, not selected
+using a checksum. The original fixed timing model remains available, and
+conflicting valid payloads from the two models are rejected.
 
-## Initial build result (historical, before the field correction)
+Saved 183-chip packets additionally establish 11 complete zero preamble bits
+after alignment. The length gate now covers 11–16 complete preamble bits;
+all 80 payload bits must still be present. Every Manchester pair, zero
+preamble and SUM8 check must pass. A measured gap may supply the final
+half-bit only when its observed level completes the pair. `finish()` cannot
+invent an unobserved tail. Glitches, missing edges and buffer overflow still
+invalidate a packet. No payload bit repair or sensor whitelist is used.
 
-The production C++ decoder replays **nine complete, integrity-valid packets**
-from three existing recordings. Fixtures preserve the original pulse lists.
-Incomplete, glitched, and malformed packets are rejected.
+The JSON diagnostics identify `adaptive_timing`, `short_low_us`,
+`short_high_us` and cumulative `timing_recovered`. Short centers are zero
+when the fixed model supplied the result. The firmware adds 384 bytes for
+saved pulse durations and performs classification outside the ISR.
 
-| Recording | Complete accepted copies | Decoded bytes, in transmitted byte order |
-|---|---:|---|
-| TPMS88_CAPTURE | 3 | 15 B9 9A A4 01 C0 5C 20 1C 65 |
-| TPMS89_CAPTURE | 4 | 15 B9 9A A4 01 C0 5C 21 1C 66 |
-| TPMS_RAW_CAPTURE, final recorded block | 2 | 15 B9 9A A4 01 C0 5C 20 1C 65 |
+## Recorded protocol and current boundaries
 
-These are two distinct payload values, not nine independent field-calibration
-points. Repeated captures alone cannot establish pressure or temperature units.
+Legacy H/L labels refer to the level **after** an edge, the opposite of the
+level held during the preceding duration. After Manchester decoding, bits
+within each byte are least significant first. Ten bytes are transmitted;
+`sum(bytes[0:9]) & 0xff == bytes[9]`. This is SUM8, not CRC-8.
+Two identical valid payloads received within one second set
+`repeat_confirmed`; four recent-payload slots keep separate sensors apart.
 
-## Derivation
+| Property | Current evidence |
+| --- | --- |
+| Frame integrity and byte order | Replayed from all five recorded fixtures |
+| Live frame records | 32 originally emitted; nine additional raw packets recovered offline |
+| Stable prefix | `15B99AA4`, bytes 0–3; candidate only |
+| Pressure field candidate | `((b5 & 1) << 8) | b6`; unverified mask and units |
+| Temperature field candidate | b7 equals 32 and 36 at the two delayed reference candidates |
+| Final ID boundaries | Not established; `sensor_id: null` |
+| Physical conversions | Not established; `pressure_psi` and `temperature_c` remain null |
+| New firmware on hardware | Compiled/replayed offline; not a claim of a new hardware run |
 
-1. The old ISR logs each edge timestamp and the **new** GDO0 level. In
-   `103L`, the preceding 103 microseconds were HIGH. Using L as the held
-   level would invert the waveform.
-2. A short run is roughly 100 microseconds; a long run is roughly 200.
-   The observed roughly 900-microsecond separators split repeated packets.
-   Current guarded windows: 60–155 us, 156–270 us, and a separator >=650 us.
-   The unobserved 271–649 us range, short glitches, repeated edge levels,
-   and buffer overflow invalidate the partial packet.
-3. Each clean segment contains 191 half-bit chips. The first LOW preamble
-   half-bit is absorbed by the LOW separator. Skipping the remaining
-   incomplete preamble half-bit leaves 15 complete preamble bits and 80
-   data bits. A full 192-chip packet is also supported with all 16 preamble
-   bits. No missing payload bit is supplied.
-4. Every complete Manchester pair must contain opposite levels. The
-   preamble establishes polarity. Normalized 01 is zero, 10 is one.
-   The 80 data bits are grouped **least significant bit first** into ten
-   bytes. No XOR whitening or pressure-dependent bit repair is used.
-5. `sum(bytes[0:9]) & 0xff == bytes[9]` holds: 0x65 and 0x66 respectively.
-   This is an additive SUM8 check, **not CRC**. The same checksum change
-   tracks the single observed change in byte 7.
-6. Two byte-identical valid frames within 1000 ms set `repeat_confirmed`.
-   Four independent recent-payload slots avoid cross-confirming different
-   payloads. This adds repeat evidence to the relatively weak SUM8 check.
-
-The decoder is an independent implementation from project captures, not
-copied third-party GPL decoder code.
-
-## What is and is not established
-
-| Property | Evidence/status |
-|---|---|
-| Manchester, packet length, byte order | Replayed from the saved waveforms |
-| SUM8 integrity rule | Matches both distinct payloads and all nine accepted copies |
-| `15B99AA4` | Stable bytes 0–3; **ID candidate only**, width/order not proven |
-| Bytes 4–6 and 8 | Constant in these recordings; purpose unknown |
-| Byte 7 | 0x20 -> 0x21; may be a measurement, status or counter |
-| Pressure conversion | Not established; `pressure_psi: null` |
-| Temperature conversion | Not established; `temperature_c: null` |
-| Final sensor ID mapping | Not established; `sensor_id: null` |
-| On-device reception of this new build | Requires the single field session |
-
-The code never treats 0x20/0x21 as Celsius just because the numbers look
-plausible, or borrows a pressure scale from a superficially similar sensor.
-No normalized `type:tpms` measurement is emitted yet.
-
-## Open-source protocol comparison
-
-Inspected rtl_433 revision
-[`bd9073191aff109d7ea013bdcb921992b4f5a11f`](https://github.com/merbanan/rtl_433/tree/bd9073191aff109d7ea013bdcb921992b4f5a11f/src/devices).
-Relevant primary sources:
-
-- [Tyreguard 400](https://github.com/merbanan/rtl_433/blob/bd9073191aff109d7ea013bdcb921992b4f5a11f/src/devices/tpms_tyreguard400.c):
-  OOK, similar 100 us timing, but different preamble, 88-bit payload and CRC.
-- [Schrader](https://github.com/merbanan/rtl_433/blob/bd9073191aff109d7ea013bdcb921992b4f5a11f/src/devices/schraeder.c):
-  the EG53MA4 subtype has additive integrity, but a different preamble,
-  framing and documented field layout.
-- [EEZ RV](https://github.com/merbanan/rtl_433/blob/bd9073191aff109d7ea013bdcb921992b4f5a11f/src/devices/tpms_eezrv.c):
-  different 50 us timing and eight-byte payload.
-- [Steelmate](https://github.com/merbanan/rtl_433/blob/bd9073191aff109d7ea013bdcb921992b4f5a11f/src/devices/steelmate.c):
-  different modulation/timing, nine-byte layout and integrity coverage.
-- [External TPMS examples](https://github.com/andi38/TPMS):
-  the CC1101 example uses FSK at 19200 baud and a different synchronization word.
-
-None is a demonstrated full match for these captures. Their engineering units
-are therefore not adopted. This documents bounded source comparison, not a
-claim that no matching implementation exists anywhere.
-
-## Existing session and any future capture
-
-The requested three-state session has been received and replayed. Do not ask
-the owner to repeat it merely to validate this software fix. Default guided
-capture now asks for actions and Enter only; optional instrument references
-require an explicit `--with-reference` flag. No screen is assumed. Other
-sensors may remain fitted, and each stable ID candidate is grouped separately.
-
-Physical units and final ID width remain unverified. The raw field changes
-are evidence for locating fields, not numerical calibration.
+The owner used an original display in the live session. Five entered
+references represent two independent candidate observations; the first
+reference predates the earliest recoverable RF by 17.078 seconds. Recovered
+copies cannot create another physical measurement or fix that missing link.
+See [live evidence](TPMS_LIVE_20260922.md) and
+[protocol comparisons](TPMS_MAPPING_RESEARCH.md). The current instruction is
+to continue offline without another hardware test.
 
 ## Verification
 
-`python3 firmware/tests/run_replay.py` builds the exact ESP32 decoder header
-with host g++ and asserts the exact packet counts and payloads above. Tests
-also cover both polarities, full/partial preamble, timing jitter, checksum
-corruption, malformed Manchester, bad preamble, truncated payload, glitch
-rejection, resynchronization, stale-repeat expiry and clock wrap.
+`python3 firmware/tests/run_replay.py` compiles the exact ESP32 decoder
+header with host g++, asserts all recorded payloads/counts, checks both
+polarities and timing bias, and rejects malformed Manchester, bad preambles,
+truncation, glitches and bad checksums. It also checks original timestamp
+preservation, replay deduplication, reference association and capture tools.
+GitHub Actions runs these checks before building ESP32 firmware.
 
-The serial test verifies that both legacy non-JSON pulse output and new JSON
-are preserved; the previous capture tool silently discarded both.
-GitHub Actions runs these checks before compiling the ESP32 firmware.
+For a saved ZIP, developers can run:
+
+```sh
+python3 firmware/tools/tpms_reprocess.py session.zip --out new-recovery.json
+```
+
+This needs Python and g++, opens no serial port, and preserves the source.
+The report retains the raw lines, timestamps, payloads and recovery details.
+No engineering-unit mapping is automatically enabled. The decoder is derived
+independently from these captures; third-party GPL decoder code was not copied.

@@ -43,6 +43,18 @@ bool receive(tpms::Decoder &decoder, const std::vector<bool> &chips, tpms::Frame
   }
   return observedGap ? decoder.pulse(925, gapLevel, out) : decoder.finish(out);
 }
+bool receiveBiased(tpms::Decoder &decoder, const std::vector<bool> &chips,
+                   tpms::Frame &out, int bias, int glitchAt = -1) {
+  for (size_t i = 0, run = 0; i < chips.size(); ++run) {
+    size_t end = i + 1;
+    while (end < chips.size() && chips[end] == chips[i]) ++end;
+    const int duration = 104 * int(end-i) + (chips[i] ? -bias : bias)
+                         + (run % 3 == 0 ? 3 : -3);
+    decoder.pulse(int(run) == glitchAt ? 27 : duration, chips[i], out);
+    i = end;
+  }
+  return decoder.finishGap(!chips.back(), out);
+}
 void selfTest() {
   const Bytes known = {0x15,0xB9,0x9A,0xA4,0x01,0xC0,0x5C,0x21,0x1C,0x66};
   tpms::Frame out;
@@ -64,6 +76,35 @@ void selfTest() {
     require(receive(d, encode(known, invert, partial), out), "polarity/preamble/jitter");
     require(hex(out) == "15B99AA401C05C211C66", "LSB-first payload");
     require(out.inverted == invert, "polarity marker");
+  }
+  // Width estimates must come from the preamble, not checksum trial and error.
+  // A +/-50 us level bias crosses the old 155 us threshold in both directions.
+  for (bool invert : {false, true}) for (int bias : {-50, 50}) {
+    tpms::Decoder d;
+    require(receiveBiased(d, encode(known, invert, true, 12), out, bias),
+            "biased duty cycle and 11 visible preamble bits");
+    require(hex(out) == "15B99AA401C05C211C66", "biased payload exact");
+    require(out.adaptiveTiming && d.counters.timingRecovered == 1,
+            "adaptive timing is reported");
+    require(out.preambleBits == 11, "short recorded preamble");
+    auto corrupt = known; corrupt[6] ^= 1;
+    require(!receiveBiased(d, encode(corrupt, invert, true, 12), out, bias),
+            "biased checksum corruption rejected");
+    require(!receiveBiased(d, encode(known, invert, true, 12), out, bias, 40),
+            "adaptive path does not repair a glitch");
+    require(!receiveBiased(d, encode(known, invert, true, 11), out, bias),
+            "less than 11 complete preamble bits rejected");
+  }
+  {
+    tpms::Decoder d;
+    auto invalid = encode(known, false, true, 12);
+    invalid[72] = invalid[73];
+    require(!receiveBiased(d, invalid, out, 50), "biased invalid Manchester rejected");
+    auto wrongPreamble = encode(known, false, true, 12);
+    wrongPreamble[7] = !wrongPreamble[7];
+    wrongPreamble[8] = !wrongPreamble[8];
+    require(!receiveBiased(d, wrongPreamble, out, 50), "biased bad preamble rejected");
+    require(receiveBiased(d, encode(known), out, 50), "adaptive resync after rejection");
   }
   {
     tpms::Decoder d;
@@ -122,7 +163,9 @@ void selfTest() {
 int main(int argc, char **argv) {
   selfTest();
   const std::regex token(R"((\d+)([HL]))");
+  const bool json = argc > 1 && std::string(argv[1]) == "--jsonl";
   for (int arg = 1; arg < argc; ++arg) {
+    if (json && arg == 1) continue;
     std::ifstream input(argv[arg]);
     require(bool(input), "fixture open");
     std::string line;
@@ -136,17 +179,28 @@ int main(int argc, char **argv) {
       const auto pulses = line.substr(start + skip);
       tpms::Decoder decoder; tpms::Frame frame;
       bool lastAfter = false;
+      auto emit = [&]() {
+        if (!json) {
+          std::cout << argv[arg] << ':' << lineNumber << ' ' << hex(frame) << '\n';
+          return;
+        }
+        std::cout << "{\"line\":" << lineNumber << ",\"payload_hex\":\"" << hex(frame)
+                  << "\",\"preamble_bits\":" << unsigned(frame.preambleBits)
+                  << ",\"gap_tail\":" << (frame.gapTail ? "true" : "false")
+                  << ",\"adaptive_timing\":" << (frame.adaptiveTiming ? "true" : "false")
+                  << ",\"short_low_us\":" << frame.shortLowUs
+                  << ",\"short_high_us\":" << frame.shortHighUs << "}\n";
+      };
       for (std::sregex_iterator i(pulses.begin(), pulses.end(), token), end; i != end; ++i) {
         lastAfter = (*i)[2] == "H";
         // Legacy labels describe the NEW level, opposite of the held level.
         if (decoder.pulse(std::stoul((*i)[1]), (*i)[2] == "L", frame))
-          std::cout << argv[arg] << ':' << lineNumber << ' ' << hex(frame) << '\n';
+          emit();
       }
       // scope=packet is only emitted after a measured gap or sustained idle.
       const bool valid = line.find("scope=packet") != std::string::npos
           ? decoder.finishGap(lastAfter, frame) : decoder.finish(frame);
-      if (valid)
-        std::cout << argv[arg] << ':' << lineNumber << ' ' << hex(frame) << '\n';
+      if (valid) emit();
     }
   }
 }

@@ -71,12 +71,14 @@ void emitFrame(const tpms::Frame &frame) {
                 "\"id_candidate\":\"%02X%02X%02X%02X\",\"id_candidate_range\":\"bytes_0_3\","
                 "\"sensor_id\":null,\"pressure_psi\":null,\"temperature_c\":null,"
                 "\"preamble_bits\":%u,\"gap_tail\":%s,\"raw_b5_b6\":%u,\"raw_b7\":%u,"
+                "\"adaptive_timing\":%s,\"short_low_us\":%u,\"short_high_us\":%u,"
                 "\"mapping_verified\":false}\n",
     (unsigned long)++frameSequence, (unsigned long)millis(), payload,
     count, count >= 2 ? "true" : "false",
     frame.bytes[0], frame.bytes[1], frame.bytes[2], frame.bytes[3],
     frame.preambleBits, frame.gapTail ? "true" : "false",
-    (unsigned(frame.bytes[5]) << 8) | frame.bytes[6], unsigned(frame.bytes[7]));
+    (unsigned(frame.bytes[5]) << 8) | frame.bytes[6], unsigned(frame.bytes[7]),
+    frame.adaptiveTiming ? "true" : "false", frame.shortLowUs, frame.shortHighUs);
 }
 
 void finishRaw(bool valid) {
@@ -124,9 +126,11 @@ void printStatus() {
   Serial.printf("{\"v\":3,\"type\":\"status\",\"mode\":\"tpms_frame_decoder\","
                 "\"build\":\"%s\",\"rf_mhz\":433.92,\"valid_frames\":%lu,"
                 "\"dropped_edges\":%lu,\"reject_timing\":%lu,\"reject_length\":%lu,"
+                "\"timing_recovered\":%lu,"
                 "\"reject_manchester\":%lu,\"reject_preamble\":%lu,\"reject_checksum\":%lu}\n",
     TPMS_BUILD_SHA, (unsigned long)c.valid, (unsigned long)handledDrops,
     (unsigned long)c.timing, (unsigned long)c.length,
+    (unsigned long)c.timingRecovered,
     (unsigned long)c.manchester, (unsigned long)c.preamble, (unsigned long)c.checksum);
 }
 
